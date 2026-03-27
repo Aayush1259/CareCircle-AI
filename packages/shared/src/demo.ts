@@ -41,6 +41,35 @@ const isoDateTime = (offsetDays = 0, hour = 9, minute = 0) => {
 
 const uid = (prefix: string, index: number) => `${prefix}_${String(index).padStart(3, "0")}`;
 
+export const demoPassword = "Demo1234";
+
+export const demoAccounts = [
+  {
+    id: "user_sarah",
+    email: "demo@carecircle.ai",
+    name: "Sarah Martinez",
+    label: "Caregiver demo",
+  },
+  {
+    id: "user_james",
+    email: "james@carecircle.ai",
+    name: "James Martinez",
+    label: "Co-caregiver demo",
+  },
+  {
+    id: "user_maria",
+    email: "maria@carecircle.ai",
+    name: "Maria Lopez",
+    label: "Family demo",
+  },
+  {
+    id: "user_doctor",
+    email: "doctor@carecircle.ai",
+    name: "Dr. Robert Chen",
+    label: "Doctor demo",
+  },
+] as const;
+
 export const buildDemoSnapshot = (): AppSnapshot => {
   const viewer: UserRecord = {
     id: "user_sarah",

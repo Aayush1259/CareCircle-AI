@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Chrome, HeartHandshake, LockKeyhole, Mail } from "lucide-react";
 import toast from "react-hot-toast";
+import { demoAccounts, demoPassword } from "@carecircle/shared";
 import { Button, Card, Field, Input } from "@/components/ui";
 import { useAppData } from "@/context/AppDataContext";
 import { resolveViewerRole, roleHomePath } from "@/lib/roles";
@@ -11,8 +12,8 @@ export const LoginPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { login, loading, startGoogleAuth, appConfig } = useAppData();
-  const [email, setEmail] = useState("demo@carecircle.ai");
-  const [password, setPassword] = useState("Demo1234");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const inviteToken = searchParams.get("inviteToken");
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -67,7 +68,7 @@ export const LoginPage = () => {
             </div>
             <h2 className="mt-4 text-3xl font-bold text-textPrimary">Sign in</h2>
             <p className="mt-2 text-base text-textSecondary">
-              Use the demo account below or your real CareCircle login.
+              Sign in with your CareCircle account, or try one of the demo roles below.
             </p>
 
             <form className="mt-6 grid gap-4" onSubmit={handleSubmit}>
@@ -117,9 +118,26 @@ export const LoginPage = () => {
             ) : null}
 
             <div className="mt-6 rounded-3xl bg-brandSoft/55 p-4">
-              <p className="text-sm font-semibold text-textPrimary">Demo login</p>
-              <p className="mt-1 text-sm text-textSecondary">demo@carecircle.ai</p>
-              <p className="text-sm text-textSecondary">Demo1234</p>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-textPrimary">Try the demo</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-textSecondary">Password: {demoPassword}</p>
+              </div>
+              <div className="mt-3 grid gap-2">
+                {demoAccounts.map((account) => (
+                  <button
+                    key={account.id}
+                    type="button"
+                    className="rounded-2xl border border-borderColor bg-white px-4 py-3 text-left transition hover:border-brand hover:bg-brandSoft/40"
+                    onClick={() => {
+                      setEmail(account.email);
+                      setPassword(demoPassword);
+                    }}
+                  >
+                    <p className="text-sm font-semibold text-textPrimary">{account.label}</p>
+                    <p className="mt-1 text-sm text-textSecondary">{account.email}</p>
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="mt-6 flex flex-wrap items-center justify-between gap-3 text-sm">

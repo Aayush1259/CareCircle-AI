@@ -7,16 +7,21 @@ import {
   normalizePatientPermissions,
   type ActivityEventRecord,
   type ActivityReactionRecord,
+  type AIInsightRecord,
   type AppSettingsRecord,
   type AppSnapshot,
   type AppointmentRecord,
   type CareJournalRecord,
+  type ChatMessageRecord,
+  type ChatSessionRecord,
   type DocumentAIAnalysis,
   type DocumentRecord,
+  type EmergencyProtocolRecord,
   type FamilyMessageRecord,
   type HealthVitalsRecord,
   type MedicationLogRecord,
   type MedicationRecord,
+  type NotificationRecord,
   type NotificationPreferences,
   type PatientAccessLevel,
   type PatientAccessRecord,
@@ -73,6 +78,10 @@ const removeById = async (table: string, id: string) => {
   const { error } = await supabaseAdmin.from(table).delete().eq("id", id);
   if (error) throw new Error(`Unable to delete ${table}: ${error.message}`);
 };
+
+const isMissingColumnError = (error: unknown, columnName: string) =>
+  error instanceof Error &&
+  new RegExp(`column .*${columnName}|${columnName}.*does not exist`, "i").test(error.message);
 
 const mapDocumentSummary = (value: unknown): DocumentAIAnalysis => {
   const source = isObject(value) ? value : {};
@@ -372,6 +381,68 @@ const mapAudit = (row: Record<string, unknown>): SecurityAuditRecord => ({
   metadata: isObject(row.metadata) ? (row.metadata as Record<string, string | number | boolean>) : undefined,
 });
 
+const mapEmergencyProtocol = (row: Record<string, unknown>): EmergencyProtocolRecord => ({
+  id: str(row.id),
+  patientId: str(row.patient_id),
+  protocolType: str(row.protocol_type, "general") as EmergencyProtocolRecord["protocolType"],
+  title: str(row.title),
+  steps: arr(row.steps),
+  responderNotes: arr(row.responder_notes),
+  importantNumbers: Array.isArray(row.important_numbers)
+    ? row.important_numbers.filter(
+        (item): item is { label: string; phone: string } =>
+          isObject(item) && typeof item.label === "string" && typeof item.phone === "string",
+      )
+    : [],
+  lastUpdated: str(row.last_updated, new Date().toISOString()),
+  pdfUrl: opt(row.pdf_url),
+  shareToken: str(row.share_token),
+});
+
+const mapInsight = (row: Record<string, unknown>): AIInsightRecord => ({
+  id: str(row.id),
+  patientId: str(row.patient_id),
+  insightType: str(row.insight_type, "suggestion") as AIInsightRecord["insightType"],
+  title: str(row.title),
+  body: str(row.body),
+  actionRecommended: str(row.action_recommended),
+  generatedAt: str(row.generated_at, new Date().toISOString()),
+  isRead: bool(row.is_read),
+  isDismissed: bool(row.is_dismissed),
+});
+
+const mapNotification = (row: Record<string, unknown>): NotificationRecord => ({
+  id: str(row.id),
+  userId: str(row.user_id),
+  patientId: str(row.patient_id),
+  type: str(row.type, "family_update") as NotificationRecord["type"],
+  title: str(row.title),
+  message: str(row.message),
+  isRead: bool(row.is_read),
+  scheduledFor: str(row.scheduled_for, str(row.created_at, new Date().toISOString())),
+  sentAt: opt(row.sent_at),
+  createdAt: str(row.created_at, new Date().toISOString()),
+});
+
+const mapChatSession = (row: Record<string, unknown>): ChatSessionRecord => ({
+  id: str(row.id),
+  patientId: str(row.patient_id),
+  userId: str(row.user_id),
+  title: str(row.title, "Care Chat"),
+  createdAt: str(row.created_at, new Date().toISOString()),
+  updatedAt: str(row.updated_at, str(row.created_at, new Date().toISOString())),
+});
+
+const mapChatMessage = (row: Record<string, unknown>): ChatMessageRecord => ({
+  id: str(row.id),
+  sessionId: str(row.session_id),
+  patientId: str(row.patient_id),
+  userId: opt(row.user_id),
+  role: str(row.role, "assistant") === "user" ? "user" : "assistant",
+  content: str(row.content),
+  createdAt: str(row.created_at, new Date().toISOString()),
+});
+
 const redactFamilyMedication = (record: MedicationRecord): MedicationRecord => ({
   ...record,
   brandName: undefined,
@@ -472,8 +543,11 @@ export const persistenceService = {
       reactionResult,
       settingsResult,
       auditResult,
-      familySessionResult,
-      familyMessageResult,
+      emergencyResult,
+      insightResult,
+      notificationResult,
+      sessionResult,
+      messageResult,
     ] = await Promise.all([
       supabaseAdmin.from("patient_access").select("*").eq("patient_id", patient.id),
       supabaseAdmin.from("medications").select("*").eq("patient_id", patient.id).order("created_at", { ascending: false }),
@@ -487,7 +561,10 @@ export const persistenceService = {
       supabaseAdmin.from("activity_reactions").select("*").order("created_at", { ascending: false }),
       supabaseAdmin.from("app_settings").select("*").eq("user_id", viewerId).maybeSingle(),
       supabaseAdmin.from("audit_log").select("*").or(`patient_id.eq.${patient.id},actor_id.eq.${viewerId}`).order("created_at", { ascending: false }).limit(25),
-      supabaseAdmin.from("chat_sessions").select("*").eq("patient_id", patient.id).eq("title", "Family Hub").maybeSingle(),
+      supabaseAdmin.from("emergency_protocols").select("*").eq("patient_id", patient.id).order("last_updated", { ascending: false }),
+      supabaseAdmin.from("ai_insights").select("*").eq("patient_id", patient.id).order("generated_at", { ascending: false }),
+      supabaseAdmin.from("notifications").select("*").eq("patient_id", patient.id).eq("user_id", viewerId).order("created_at", { ascending: false }),
+      supabaseAdmin.from("chat_sessions").select("*").eq("patient_id", patient.id).order("updated_at", { ascending: false }),
       supabaseAdmin.from("chat_messages").select("*").eq("patient_id", patient.id).order("created_at", { ascending: true }),
     ]);
 
@@ -503,11 +580,14 @@ export const persistenceService = {
       activityResult,
       reactionResult,
       auditResult,
-      familyMessageResult,
+      emergencyResult,
+      insightResult,
+      notificationResult,
+      sessionResult,
+      messageResult,
     ].find((result) => result.error);
     if (failures?.error) throw new Error(failures.error.message);
     if (settingsResult.error) throw new Error(settingsResult.error.message);
-    if (familySessionResult.error && familySessionResult.status !== 406) throw new Error(familySessionResult.error.message);
 
     const rawAccessRows = accessResult.data ?? [];
     const rosterUserIds = Array.from(
@@ -667,27 +747,46 @@ export const persistenceService = {
       ? (auditResult.data ?? []).map((row) => mapAudit(row))
       : (auditResult.data ?? []).map((row) => mapAudit(row)).filter((row) => row.userId === viewer.id);
 
-    const familySessionId = str(familySessionResult.data?.id);
+    const chatSessions = (sessionResult.data ?? []).map((row) => mapChatSession(row));
+    const chatMessages = (messageResult.data ?? []).map((row) => mapChatMessage(row));
+    const familySession = chatSessions.find((record) => record.title === "Family Hub");
+    const familySessionId = familySession?.id ?? "";
     snapshot.familyMessages =
       viewerAccess.permissions.canViewFamily && viewerAccess.accessRole !== "doctor"
-        ? (familyMessageResult.data ?? [])
+        ? (messageResult.data ?? [])
             .filter((row) => str(row.session_id) === familySessionId && str(row.role, "user") === "user")
-            .map((row) => ({
-              id: str(row.id),
-              patientId: str(row.patient_id),
-              userId: str(row.user_id),
-              userName: str(row.user_id) === viewer.id ? viewer.name : "CareCircle member",
-              userAvatarUrl: str(row.user_id) === viewer.id ? viewer.photoUrl : undefined,
-              messageText: str(row.content),
-              createdAt: str(row.created_at, new Date().toISOString()),
-              isPinned: bool(row.is_pinned),
-            }))
+            .map((row) => {
+              const messageUserId = str(row.user_id);
+              const messageUser = rosterUsersById.get(messageUserId);
+              return {
+                id: str(row.id),
+                patientId: str(row.patient_id),
+                userId: messageUserId,
+                userName: messageUser?.name ?? "CareCircle member",
+                userAvatarUrl: messageUser?.photoUrl,
+                messageText: str(row.content),
+                createdAt: str(row.created_at, new Date().toISOString()),
+                isPinned: bool(row.is_pinned),
+              };
+            })
         : [];
-
-    snapshot.aiInsights = [];
-    snapshot.notifications = [];
-    snapshot.chatSessions = [];
-    snapshot.chatMessages = [];
+    snapshot.emergencyProtocols = viewerAccess.permissions.canViewEmergency
+      ? (emergencyResult.data ?? []).map((row) => mapEmergencyProtocol(row))
+      : [];
+    snapshot.aiInsights = viewerAccess.permissions.canViewAiInsights
+      ? (insightResult.data ?? []).map((row) => mapInsight(row))
+      : [];
+    snapshot.notifications = (notificationResult.data ?? []).map((row) => mapNotification(row));
+    snapshot.chatSessions =
+      viewerAccess.permissions.canViewAiInsights && viewerAccess.accessRole !== "doctor"
+        ? chatSessions.filter((record) => record.id !== familySessionId && record.userId === viewer.id)
+        : viewerAccess.permissions.canViewAiInsights
+          ? chatSessions.filter((record) => record.id !== familySessionId)
+          : [];
+    const visibleChatSessionIds = new Set(snapshot.chatSessions.map((record) => record.id));
+    snapshot.chatMessages = snapshot.chatSessions.length
+      ? chatMessages.filter((record) => visibleChatSessionIds.has(record.sessionId))
+      : [];
     return snapshot;
   },
 
@@ -939,7 +1038,8 @@ export const persistenceService = {
       created_at: record.createdAt,
       updated_at: record.createdAt,
     });
-    await upsert("chat_messages", {
+
+    const baseRow = {
       id: record.id,
       session_id: sessionId,
       patient_id: record.patientId,
@@ -947,8 +1047,19 @@ export const persistenceService = {
       role: "user",
       content: record.messageText,
       created_at: record.createdAt,
-      is_pinned: record.isPinned,
-    });
+    };
+
+    try {
+      await upsert("chat_messages", {
+        ...baseRow,
+        is_pinned: record.isPinned,
+      });
+    } catch (error) {
+      if (!isMissingColumnError(error, "is_pinned")) {
+        throw error;
+      }
+      await upsert("chat_messages", baseRow);
+    }
   },
 
   async persistActivityEvent(record: ActivityEventRecord) {

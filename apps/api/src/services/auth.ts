@@ -465,6 +465,8 @@ export const authService = {
         await persistenceService.persistUser(viewer);
         return await buildSession(viewer, "supabase");
       }
+
+      throw new Error(error?.message || "The email or password looks incorrect. Please try again.");
     }
 
     const viewer = getState().users.find((user) => user.email.toLowerCase() === normalizedEmail);

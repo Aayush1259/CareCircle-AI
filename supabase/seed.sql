@@ -11,7 +11,8 @@ values
     '{"medicationReminders":true,"appointment24h":true,"appointment1h":true,"weeklySummary":true,"weeklySummaryDay":"Sunday","aiInsightAlerts":true,"familyActivityUpdates":true}'::jsonb
   ),
   ('user_james', 'james@carecircle.ai', 'James Martinez', 'family_member', '(555) 333-8899', now() - interval '70 days', now() - interval '1 day', '{}'::jsonb),
-  ('user_maria', 'maria@carecircle.ai', 'Maria Lopez', 'family_member', '(555) 777-4455', now() - interval '55 days', now() - interval '1 day', '{}'::jsonb)
+  ('user_maria', 'maria@carecircle.ai', 'Maria Lopez', 'family_member', '(555) 777-4455', now() - interval '55 days', now() - interval '1 day', '{}'::jsonb),
+  ('user_doctor', 'doctor@carecircle.ai', 'Dr. Robert Chen', 'doctor', '(555) 234-5678', now() - interval '80 days', now() - interval '2 days', '{}'::jsonb)
 on conflict (id) do nothing;
 
 insert into patients (
@@ -130,6 +131,21 @@ values
     now() - interval '55 days',
     now() - interval '55 days',
     now() - interval '1 day'
+  ),
+  (
+    'access_004',
+    'patient_ellie',
+    'user_doctor',
+    'doctor',
+    public.default_access_permissions('doctor', 'clinical_access'),
+    'doctor@carecircle.ai',
+    'invite_004',
+    'user_sarah',
+    'active',
+    now() - interval '80 days',
+    now() - interval '80 days',
+    now() - interval '80 days',
+    now() - interval '2 days'
   )
 on conflict (patient_id, user_id) do update
 set
