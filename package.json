@@ -1,0 +1,26 @@
+{
+  "name": "carecircle-ai",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:api": "npm --workspace @carecircle/api run dev",
+    "dev:web": "npm --workspace @carecircle/web run dev",
+    "build": "npm run build:api && npm run build:web",
+    "build:shared": "npm --workspace @carecircle/shared run build",
+    "build:api": "npm run build:shared && npm --workspace @carecircle/api run build",
+    "build:web": "npm --workspace @carecircle/web run build",
+    "test": "npm run test:api && npm run test:web",
+    "test:api": "npm --workspace @carecircle/api run test",
+    "test:web": "npm --workspace @carecircle/web run test",
+    "test:e2e": "npm --workspace @carecircle/web run test:e2e"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.1",
+    "typescript": "^5.8.3"
+  }
+}

@@ -1,0 +1,26 @@
+node_modules
+dist
+.turbo
+.DS_Store
+.env
+.env.local
+.env.production
+.env.*.local
+.vercel
+.railway
+coverage
+playwright-report
+test-results
+apps/web/.vite
+apps/web/dist
+apps/api/dist
+apps/web/.env.local
+apps/api/.env
+apps/api/.env.local
+build
+Thumbs.db
+.idea/
+.vscode/settings.json
+Api s.txt
+Supabase.txt
+*.log

@@ -1,0 +1,141 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --base-font-size: 16px;
+  --color-primary: #0d9488;
+  --color-primary-light: #ccfbf1;
+  --color-primary-dark: #0f766e;
+  --color-secondary: #f59e0b;
+  --color-danger: #ef4444;
+  --color-success: #22c55e;
+  --color-background: #f8fafc;
+  --color-surface: #ffffff;
+  --color-text-primary: #1e293b;
+  --color-text-secondary: #64748b;
+  --color-border: #e2e8f0;
+  --color-primary-rgb: 13 148 136;
+}
+
+[data-theme="blue"] {
+  --color-primary: #2563eb;
+  --color-primary-light: #dbeafe;
+  --color-primary-dark: #1d4ed8;
+  --color-primary-rgb: 37 99 235;
+}
+
+[data-theme="purple"] {
+  --color-primary: #7c3aed;
+  --color-primary-light: #ede9fe;
+  --color-primary-dark: #6d28d9;
+  --color-primary-rgb: 124 58 237;
+}
+
+[data-contrast="high"] {
+  --color-background: #eef2ff;
+  --color-surface: #ffffff;
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #334155;
+  --color-border: #94a3b8;
+}
+
+html {
+  font-size: var(--base-font-size);
+  font-family: "Inter", system-ui, sans-serif;
+  color: var(--color-text-primary);
+  background: radial-gradient(circle at top left, rgba(var(--color-primary-rgb) / 0.12), transparent 35%),
+    linear-gradient(180deg, #f7fffd 0%, var(--color-background) 45%);
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  font-size: 16px;
+  line-height: 1.6;
+  background: transparent;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button,
+a[role="button"],
+input,
+select,
+textarea {
+  min-height: 48px;
+}
+
+img,
+svg {
+  display: block;
+}
+
+[data-font-scale="normal"] {
+  --base-font-size: 16px;
+}
+
+[data-font-scale="large"] {
+  --base-font-size: 19px;
+}
+
+[data-font-scale="extra_large"] {
+  --base-font-size: 22px;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(var(--color-primary-rgb) / 0.2);
+}
+
+.sidebar-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: transparent;
+}
+
+.sidebar-scroll:hover::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+}
+
+@layer components {
+  .surface-panel {
+    @apply rounded-3xl border border-borderColor bg-surface shadow-sm;
+  }
+
+  .panel-pad {
+    @apply p-4 sm:p-5;
+  }
+
+  .eyebrow {
+    @apply text-[0.82rem] font-semibold uppercase tracking-[0.18em] text-textSecondary;
+  }
+
+  .field-label {
+    @apply mb-2 block text-[0.95rem] font-semibold text-textPrimary;
+  }
+}
