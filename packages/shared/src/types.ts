@@ -1,15 +1,17 @@
-export type UserRole = "caregiver" | "family_member" | "doctor" | "admin";
+export type UserRole = "primary_caregiver" | "secondary_caregiver" | "family_member" | "doctor" | "admin" | "caregiver";
 export type FamilyRole =
   | "primary_caregiver"
   | "secondary_caregiver"
+  | "family_member"
   | "family"
   | "emergency_contact";
-export type PermissionLevel = "view_only" | "can_log" | "full_access";
+export type PermissionLevel = "view_only" | "can_coordinate" | "can_log" | "full_access";
 export type PatientAccessRole = FamilyRole | "doctor";
 export type PatientAccessLevel = PermissionLevel | "clinical_access";
 export type PatientCapability =
   | "view_dashboard"
   | "view_medications"
+  | "manage_medications"
   | "log_medications"
   | "view_journal"
   | "log_journal"
@@ -23,12 +25,16 @@ export type PatientCapability =
   | "manage_family"
   | "view_tasks"
   | "manage_tasks"
+  | "complete_tasks"
   | "view_emergency"
   | "share_emergency"
   | "edit_patient"
   | "export_data"
   | "add_clinical_notes"
-  | "accept_invites";
+  | "accept_invites"
+  | "view_insurance"
+  | "view_ai_insights"
+  | "view_audit_log";
 export type Frequency =
   | "once"
   | "twice"
@@ -103,6 +109,8 @@ export type AuditActionType =
   | "invite_accepted"
   | "invite_resend"
   | "invite_cancel"
+  | "permissions_updated"
+  | "access_status_updated"
   | "profile_updated"
   | "patient_updated"
   | "notification_updated"
@@ -173,6 +181,7 @@ export interface PatientAccessRecord {
   name: string;
   accessRole: PatientAccessRole;
   accessLevel: PatientAccessLevel;
+  permissions: PatientPermissionSet;
   capabilities: PatientCapability[];
   invitedBy: string;
   joinStatus: "pending" | "active" | "revoked";
@@ -268,6 +277,9 @@ export interface DocumentRecord {
   aiActionItems: string[];
   isProcessed: boolean;
   extractedText?: string;
+  processingStatus: "queued" | "processing" | "ready" | "failed";
+  processingError?: string;
+  isLowConfidence?: boolean;
 }
 
 export interface AppointmentRecord {
@@ -536,6 +548,39 @@ export interface BootstrapPayload {
   viewerAccess: PatientAccessRecord | null;
   patientAccess: PatientAccessRecord[];
   capabilities: PatientCapability[];
+  permissions: PatientPermissionSet | null;
   dashboard: DashboardSummary;
+  appConfig: {
+    googleAuthEnabled: boolean;
+  };
   data: Omit<AppSnapshot, "activeUserId" | "activePatientId">;
+}
+
+export interface PatientPermissionSet {
+  canViewMedications: boolean;
+  canManageMedications: boolean;
+  canLogMedications: boolean;
+  canViewJournal: boolean;
+  canLogJournal: boolean;
+  canViewDocuments: boolean;
+  canUploadDocuments: boolean;
+  canViewAppointments: boolean;
+  canManageAppointments: boolean;
+  canViewVitals: boolean;
+  canViewVitalsRaw: boolean;
+  canLogVitals: boolean;
+  canViewFamily: boolean;
+  canManageFamily: boolean;
+  canViewTasks: boolean;
+  canManageTasks: boolean;
+  canCompleteTasks: boolean;
+  canViewEmergency: boolean;
+  canShareEmergency: boolean;
+  canEditPatient: boolean;
+  canExportData: boolean;
+  canAddClinicalNotes: boolean;
+  canAcceptInvites: boolean;
+  canViewInsurance: boolean;
+  canViewAiInsights: boolean;
+  canViewAuditLog: boolean;
 }

@@ -5,19 +5,25 @@ import toast from "react-hot-toast";
 import type { UserRole } from "@carecircle/shared";
 import { Button, Card, Field, Input } from "@/components/ui";
 import { useAppData } from "@/context/AppDataContext";
-import { roleDescription, roleHomePath, roleLabel } from "@/lib/roles";
+import { resolveViewerRole, roleDescription, roleHomePath, roleLabel } from "@/lib/roles";
 import { hasBrowserSupabaseAuth } from "@/lib/supabaseBrowser";
 
 const roleOptions: Array<{
-  role: Exclude<UserRole, "admin">;
+  role: Exclude<UserRole, "admin" | "caregiver">;
   title: string;
   description: string;
   icon: typeof HeartHandshake;
 }> = [
   {
-    role: "caregiver",
-    title: "Main caregiver",
+    role: "primary_caregiver",
+    title: "Primary caregiver",
     description: "I manage day-to-day care and the big decisions.",
+    icon: HeartHandshake,
+  },
+  {
+    role: "secondary_caregiver",
+    title: "Co-caregiver",
+    description: "I actively assist the primary caregiver.",
     icon: HeartHandshake,
   },
   {
@@ -37,13 +43,13 @@ const roleOptions: Array<{
 export const SignupPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { signup, loading, startGoogleAuth } = useAppData();
+  const { signup, loading, startGoogleAuth, appConfig } = useAppData();
   const [form, setForm] = useState({
     name: "",
     email: "",
     password: "",
     confirmPassword: "",
-    role: "caregiver" as Exclude<UserRole, "admin">,
+    role: "primary_caregiver" as Exclude<UserRole, "admin" | "caregiver">,
     licenseNumber: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -57,6 +63,9 @@ export const SignupPage = () => {
     if (!form.email.trim()) nextErrors.email = "Please enter an email address.";
     if (!form.password.trim() || form.password.trim().length < 8) nextErrors.password = "Use at least 8 characters.";
     if (form.password !== form.confirmPassword) nextErrors.confirmPassword = "Passwords do not match.";
+    if (form.role === "secondary_caregiver" && !inviteToken) {
+      nextErrors.role = "Secondary caregivers join through an invite from the primary caregiver.";
+    }
     if (form.role === "doctor" && !form.licenseNumber.trim()) nextErrors.licenseNumber = "Please add your license number.";
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
@@ -80,17 +89,22 @@ export const SignupPage = () => {
         navigate(`/invite/${inviteToken}`, { replace: true });
         return;
       }
-      if (session.viewer.role === "caregiver") {
+      const viewerRole = resolveViewerRole(session.viewer.role, session.access?.accessRole);
+      if (viewerRole === "primary_caregiver") {
         navigate("/onboarding", { replace: true });
         return;
       }
-      navigate(roleHomePath(session.viewer.role), { replace: true });
+      navigate(roleHomePath(viewerRole), { replace: true });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Please try again.");
     }
   };
 
   const handleGoogleSignup = async () => {
+    if (form.role === "secondary_caregiver" && !inviteToken) {
+      setErrors((current) => ({ ...current, role: "Secondary caregivers join through an invite from the primary caregiver." }));
+      return;
+    }
     if (form.role === "doctor" && !form.licenseNumber.trim()) {
       setErrors((current) => ({ ...current, licenseNumber: "Please add your license number." }));
       return;
@@ -217,6 +231,7 @@ export const SignupPage = () => {
                     );
                   })}
                 </div>
+                {errors.role ? <p className="mt-2 text-sm text-danger">{errors.role}</p> : null}
               </Field>
 
               {selectedRole.role === "doctor" ? (
@@ -238,7 +253,7 @@ export const SignupPage = () => {
               </Button>
             </form>
 
-            {hasBrowserSupabaseAuth ? (
+            {hasBrowserSupabaseAuth && appConfig.googleAuthEnabled ? (
               <>
                 <div className="my-5 flex items-center gap-3 text-sm text-textSecondary">
                   <div className="h-px flex-1 bg-borderColor" />

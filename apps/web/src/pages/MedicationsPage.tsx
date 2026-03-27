@@ -1,11 +1,12 @@
-import { useMemo, useState } from "react";
-import { CheckCircle2, Phone, Sparkles } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { CheckCircle2, Lock, Phone, Sparkles } from "lucide-react";
 import toast from "react-hot-toast";
 import type { MedicationRecord } from "@carecircle/shared";
 import { BarChart, DoughnutChart } from "@/components/charts";
 import { Badge, Button, Card, Field, Input, Modal, ProgressBar, SectionHeader, Select } from "@/components/ui";
 import { useAppData } from "@/context/AppDataContext";
 import { formatDate } from "@/lib/format";
+import { resolveViewerRole } from "@/lib/roles";
 import { hasText, trimmedText } from "@/lib/validation";
 
 const tabs = ["Today's Schedule", "All Medications", "Interaction Checker", "Refill Tracker"] as const;
@@ -32,6 +33,28 @@ export const MedicationsPage = () => {
   if (!bootstrap) return null;
 
   const { data, dashboard } = bootstrap;
+  const viewerRole = resolveViewerRole(bootstrap.viewer.role, bootstrap.viewerAccess?.accessRole);
+  const capabilities =
+    bootstrap.capabilities ??
+    (viewerRole === "family_member"
+      ? ["view_medications"]
+      : ["manage_medications", "log_medications", "view_ai_insights"]);
+  const canManageMedications = capabilities.includes("manage_medications");
+  const canLogMedications = capabilities.includes("log_medications");
+  const canViewAiInsights = capabilities.includes("view_ai_insights");
+  const canSeeMedicationDetails = viewerRole !== "family_member";
+  const availableTabs = tabs.filter((item) => {
+    if (item === "Interaction Checker") return canViewAiInsights;
+    if (item === "Refill Tracker") return canSeeMedicationDetails;
+    return true;
+  });
+
+  useEffect(() => {
+    if (!availableTabs.includes(tab)) {
+      setTab(availableTabs[0]);
+    }
+  }, [availableTabs, tab]);
+
   const today = new Date().toISOString().slice(0, 10);
   const activeMedications = data.medications.filter((medication) => medication.isActive);
   const visibleMedications =
@@ -159,8 +182,12 @@ export const MedicationsPage = () => {
         <Card>
           <SectionHeader
             title="Weekly adherence"
-            description="Seven days of progress, so trends stay simple."
-            action={<Button onClick={() => setModalOpen(true)}>+ Add Medication</Button>}
+            description={
+              viewerRole === "family_member"
+                ? "Family access stays focused on today's schedule and logging that your caregiver enabled."
+                : "Seven days of progress, so trends stay simple."
+            }
+            action={canManageMedications ? <Button onClick={() => setModalOpen(true)}>+ Add Medication</Button> : undefined}
           />
           <BarChart
             data={{
@@ -189,8 +216,23 @@ export const MedicationsPage = () => {
         </Card>
       </div>
 
+      {viewerRole === "family_member" ? (
+        <Card className="border-amber-200 bg-amber-50">
+          <div className="flex items-start gap-3">
+            <Lock className="mt-1 h-5 w-5 text-amber-700" />
+            <div>
+              <p className="font-semibold text-amber-900">Family medication access is intentionally limited.</p>
+              <p className="mt-1 text-sm text-amber-900/80">
+                You can follow the daily schedule{canLogMedications ? " and log doses you were invited to help with" : ""}, but refill details,
+                medication purpose, and interaction analysis stay with caregivers and clinicians.
+              </p>
+            </div>
+          </div>
+        </Card>
+      ) : null}
+
       <div className="flex snap-x gap-2 overflow-x-auto pb-2 scrollbar-thin">
-        {tabs.map((item) => (
+        {availableTabs.map((item) => (
           <button
             key={item}
             type="button"
@@ -230,10 +272,17 @@ export const MedicationsPage = () => {
                             <Badge tone={log?.status === "taken" ? "success" : log?.status === "missed" ? "danger" : "warning"}>
                               {log?.status === "taken" ? "Taken" : log?.status === "missed" ? "Missed" : "Due soon"}
                             </Badge>
-                            <Button variant={log?.status === "taken" ? "secondary" : "primary"} onClick={() => markTaken(medication.id)}>
-                              <CheckCircle2 className="h-4 w-4" />
-                              Mark taken
-                            </Button>
+                            {canLogMedications ? (
+                              <Button variant={log?.status === "taken" ? "secondary" : "primary"} onClick={() => markTaken(medication.id)}>
+                                <CheckCircle2 className="h-4 w-4" />
+                                Mark taken
+                              </Button>
+                            ) : viewerRole === "family_member" ? (
+                              <Button variant="ghost" disabled title="Ask the primary caregiver to enable medication logging for this account.">
+                                <Lock className="h-4 w-4" />
+                                Schedule only
+                              </Button>
+                            ) : null}
                           </div>
                         </div>
                       );
@@ -249,7 +298,11 @@ export const MedicationsPage = () => {
         <Card>
           <SectionHeader
             title="All medications"
-            description="Purpose, refill timing, and the details that keep errors down."
+            description={
+              canSeeMedicationDetails
+                ? "Purpose, refill timing, and the details that keep errors down."
+                : "Family view shows the schedule and dose only. Clinical and pharmacy details stay hidden."
+            }
             action={
               <Select value={filter} onChange={(event) => setFilter(event.target.value)} className="w-full sm:w-[180px]">
                 <option value="active">Active</option>
@@ -269,18 +322,28 @@ export const MedicationsPage = () => {
                         {medication.name} {medication.doseAmount}
                         {medication.doseUnit}
                       </p>
-                      <p className="mt-1 text-sm text-textSecondary">{medication.purpose}</p>
-                      <p className="mt-3 text-sm text-textSecondary">{medication.instructions}</p>
+                      {canSeeMedicationDetails ? (
+                        <>
+                          <p className="mt-1 text-sm text-textSecondary">{medication.purpose}</p>
+                          <p className="mt-3 text-sm text-textSecondary">{medication.instructions}</p>
+                        </>
+                      ) : (
+                        <p className="mt-2 text-sm text-textSecondary">Caregiver-managed medication details are hidden in family view.</p>
+                      )}
                     </div>
-                    <div className="space-y-3">
-                      <Badge tone={refillSoon ? "warning" : "brand"}>
-                        Refill {formatDate(medication.refillDate)}
-                      </Badge>
-                      <div className="flex gap-2">
-                        <Button variant="ghost">Edit</Button>
-                        <Button variant="secondary">Deactivate</Button>
+                    {canSeeMedicationDetails ? (
+                      <div className="space-y-3">
+                        <Badge tone={refillSoon ? "warning" : "brand"}>
+                          Refill {formatDate(medication.refillDate)}
+                        </Badge>
+                        {canManageMedications ? (
+                          <div className="flex gap-2">
+                            <Button variant="ghost">Edit</Button>
+                            <Button variant="secondary">Deactivate</Button>
+                          </div>
+                        ) : null}
                       </div>
-                    </div>
+                    ) : null}
                   </div>
                 </div>
               );
@@ -292,7 +355,7 @@ export const MedicationsPage = () => {
       {tab === "Interaction Checker" ? (
         <Card>
           <SectionHeader title="Interaction checker" description="Pick any two or more medications and let CareCircle explain the result in plain English." />
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)]">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)]">
             <div className="space-y-3">
               {activeMedications.map((medication) => {
                 const selected = selectedIds.includes(medication.id);
@@ -335,10 +398,10 @@ export const MedicationsPage = () => {
                   <p className="mt-3 text-sm font-semibold text-brandDark">{item.next_steps}</p>
                 </div>
               )) ?? (
-                <div className="rounded-3xl border border-dashed border-borderColor p-8 text-center text-textSecondary">
-                  Select medications, then tap "Check interactions."
-                </div>
-              )}
+                  <div className="rounded-3xl border border-dashed border-borderColor p-8 text-center text-textSecondary">
+                    Select medications, then tap "Check interactions."
+                  </div>
+                )}
             </div>
           </div>
         </Card>
@@ -378,7 +441,7 @@ export const MedicationsPage = () => {
         </Card>
       ) : null}
 
-      <Modal open={modalOpen} title="Add medication" onClose={() => setModalOpen(false)}>
+      <Modal open={modalOpen && canManageMedications} title="Add medication" onClose={() => setModalOpen(false)}>
         <form
           className="grid gap-4"
           onSubmit={(event) => {

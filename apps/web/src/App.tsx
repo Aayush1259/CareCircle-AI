@@ -3,7 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { motion } from "framer-motion";
 import { AppShell } from "@/components/AppShell";
 import { useAppData } from "@/context/AppDataContext";
-import { roleHomePath } from "@/lib/roles";
+import { resolveViewerRole, roleHomePath } from "@/lib/roles";
 import { LoadingState } from "@/components/ui";
 
 const OnboardingPage = lazy(async () => ({ default: (await import("@/pages/OnboardingPage")).OnboardingPage }));
@@ -47,7 +47,12 @@ const LazyPage = ({ children }: { children: ReactNode }) => (
 
 const App = () => {
   const { bootstrap, loading, error, session } = useAppData();
-  const authenticatedHome = roleHomePath(bootstrap?.viewer.role ?? session?.viewer.role);
+  const authenticatedHome = roleHomePath(
+    resolveViewerRole(
+      bootstrap?.viewer.role ?? session?.viewer.role,
+      bootstrap?.viewerAccess?.accessRole ?? session?.access?.accessRole,
+    ),
+  );
 
   if (loading) {
     return (

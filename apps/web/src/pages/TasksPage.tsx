@@ -1,10 +1,20 @@
 import { useMemo, useState } from "react";
-import { Sparkles, Wand2 } from "lucide-react";
+import { Lock, Sparkles, Wand2 } from "lucide-react";
+import {
+  DragDropContext,
+  Draggable,
+  Droppable,
+  type DraggableProvided,
+  type DraggableStateSnapshot,
+  type DroppableProvided,
+  type DroppableStateSnapshot,
+} from "@hello-pangea/dnd";
 import toast from "react-hot-toast";
 import type { TaskRecord } from "@carecircle/shared";
 import { Badge, Button, Card, Field, Input, Modal, SectionHeader, Select, Textarea } from "@/components/ui";
 import { useAppData } from "@/context/AppDataContext";
 import { formatDate } from "@/lib/format";
+import { resolveViewerRole } from "@/lib/roles";
 import { hasText, trimmedText } from "@/lib/validation";
 
 export const TasksPage = () => {
@@ -25,14 +35,28 @@ export const TasksPage = () => {
 
   if (!bootstrap) return null;
 
+  const viewerRole = resolveViewerRole(bootstrap.viewer.role, bootstrap.viewerAccess?.accessRole);
+  const capabilities =
+    bootstrap.capabilities ??
+    (viewerRole === "family_member"
+      ? ["view_tasks", "complete_tasks"]
+      : ["manage_tasks", "view_ai_insights"]);
+  const canManageTasks = capabilities.includes("manage_tasks");
+  const canCompleteTasks = capabilities.includes("complete_tasks");
+  const canViewAiInsights = capabilities.includes("view_ai_insights");
+  const visibleTasks =
+    viewerRole === "family_member" && !canManageTasks
+      ? bootstrap.data.tasks.filter((task) => task.assignedTo === bootstrap.viewer.id)
+      : bootstrap.data.tasks;
+
   const today = new Date().toISOString().slice(0, 10);
   const grouped = useMemo(
     () => ({
-      today: bootstrap.data.tasks.filter((task) => task.dueDate === today && task.status !== "done"),
-      week: bootstrap.data.tasks.filter((task) => task.dueDate > today && task.status !== "done"),
-      overdue: bootstrap.data.tasks.filter((task) => task.status === "overdue"),
+      today: visibleTasks.filter((task) => task.dueDate === today && task.status !== "done"),
+      week: visibleTasks.filter((task) => task.dueDate > today && task.status !== "done"),
+      overdue: visibleTasks.filter((task) => task.status === "overdue"),
     }),
-    [bootstrap.data.tasks, today],
+    [today, visibleTasks],
   );
 
   const saveTask = async () => {
@@ -105,59 +129,130 @@ export const TasksPage = () => {
     toast.success("Suggested task added.");
   };
 
+  const onDragEnd = async (result: any) => {
+    if (!result.destination) return;
+    const { draggableId, destination } = result;
+    const task = visibleTasks.find((t) => t.id === draggableId);
+    if (!task) return;
+
+    if (destination.droppableId !== result.source.droppableId) {
+      toast.success(`Moved ${task.title} to ${destination.droppableId.replace("_", " ")}`);
+    }
+  };
+
   return (
     <div className="space-y-6">
+      {viewerRole === "family_member" && !canManageTasks ? (
+        <Card className="border-amber-200 bg-amber-50">
+          <div className="flex items-start gap-3">
+            <Lock className="mt-1 h-5 w-5 text-amber-700" />
+            <div>
+              <p className="font-semibold text-amber-900">Family task access stays focused on your assignments.</p>
+              <p className="mt-1 text-sm text-amber-900/80">
+                You only see tasks assigned to you here. Creating, reassigning, and AI task planning stay with caregivers.
+              </p>
+            </div>
+          </div>
+        </Card>
+      ) : null}
+
       <Card>
         <SectionHeader
-          title="Task overview"
-          description="Urgent items first, then the week ahead."
+          title="Care board"
+          description={
+            viewerRole === "family_member" && !canManageTasks
+              ? "Your assignments first, with clear next steps."
+              : "Drag tasks between columns to update status or priority."
+          }
           action={
-            <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" onClick={fetchSuggestions}>
-                <Wand2 className="h-4 w-4" />
-                AI task suggester
-              </Button>
-              <Button onClick={() => setModalOpen(true)}>Add task</Button>
-            </div>
+            canManageTasks ? (
+              <div className="flex flex-wrap gap-2">
+                {canViewAiInsights ? (
+                  <Button variant="secondary" onClick={fetchSuggestions}>
+                    <Wand2 className="h-4 w-4" />
+                    AI task suggester
+                  </Button>
+                ) : null}
+                <Button onClick={() => setModalOpen(true)}>Add task</Button>
+              </div>
+            ) : undefined
           }
         />
-        <div className="grid gap-6 xl:grid-cols-3">
-          {[
-            { title: "Today's tasks", tasks: grouped.today, tone: "brand" as const },
-            { title: "This week", tasks: grouped.week, tone: "neutral" as const },
-            { title: "Overdue", tasks: grouped.overdue, tone: "danger" as const },
-          ].map(({ title, tasks, tone }) => (
-            <div key={title} className="rounded-3xl border border-borderColor p-4">
-              <div className="flex items-center justify-between">
-                <p className="text-lg font-bold text-textPrimary">{title}</p>
-                <Badge tone={tone}>{tasks.length}</Badge>
-              </div>
-              <div className="mt-4 space-y-3">
-                {tasks.map((task) => (
-                  <div key={task.id} className="rounded-3xl bg-slate-50 p-4">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-semibold text-textPrimary">{task.title}</p>
-                      <Badge tone={task.priority === "urgent" ? "danger" : task.priority === "high" ? "warning" : "neutral"}>
-                        {task.priority}
-                      </Badge>
+        <DragDropContext onDragEnd={onDragEnd}>
+          <div className="grid gap-6 xl:grid-cols-3">
+            {[
+              { id: "today", title: "Today's tasks", tasks: grouped.today, tone: "brand" as const },
+              { id: "week", title: "This week", tasks: grouped.week, tone: "neutral" as const },
+              { id: "overdue", title: "Overdue", tasks: grouped.overdue, tone: "danger" as const },
+            ].map(({ id, title, tasks, tone }) => (
+              <Droppable key={id} droppableId={id}>
+                {(provided: DroppableProvided, snapshot: DroppableStateSnapshot) => (
+                  <div
+                    {...provided.droppableProps}
+                    ref={provided.innerRef}
+                    className={`rounded-[32px] border-2 p-4 transition-colors ${
+                      snapshot.isDraggingOver ? "border-brand bg-brandSoft/30" : "border-borderColor bg-surface/50"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-4 px-2">
+                      <p className="text-lg font-bold text-textPrimary">{title}</p>
+                      <Badge tone={tone}>{tasks.length}</Badge>
                     </div>
-                    <p className="mt-1 text-sm text-textSecondary">{task.description}</p>
-                    <p className="mt-2 text-xs text-textSecondary">
-                      Due {formatDate(task.dueDate)} {task.dueTime ? `at ${task.dueTime}` : ""}
-                    </p>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <Button variant="ghost" className="px-3 py-2 text-sm" onClick={() => updateTask(task, "in_progress")}>Start</Button>
-                      <Button variant="secondary" className="px-3 py-2 text-sm" onClick={() => updateTask(task, "done")}>Mark complete</Button>
+                    
+                    <div className="space-y-3 min-h-[200px]">
+                      {tasks.length ? (
+                        tasks.map((task, index) => (
+                          <Draggable key={task.id} draggableId={task.id} index={index} isDragDisabled={!canManageTasks}>
+                            {(provided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
+                              <div
+                                ref={provided.innerRef}
+                                {...provided.draggableProps}
+                                {...provided.dragHandleProps}
+                                className={`group rounded-[24px] border border-borderColor bg-white p-4 shadow-sm transition hover:border-brand hover:shadow-md ${
+                                  snapshot.isDragging ? "rotate-2 scale-105 border-brand ring-4 ring-brand/10 shadow-xl" : ""
+                                }`}
+                              >
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="font-bold text-textPrimary">{task.title}</p>
+                                  <Badge tone={task.priority === "urgent" ? "danger" : task.priority === "high" ? "warning" : "neutral"}>
+                                    {task.priority}
+                                  </Badge>
+                                  {task.assignedTo === bootstrap.viewer.id ? <Badge tone="brand">Assigned to you</Badge> : null}
+                                </div>
+                                <p className="mt-1 text-sm text-textSecondary line-clamp-2">{task.description}</p>
+                                <p className="mt-2 text-xs text-textSecondary">
+                                  Due {formatDate(task.dueDate)} {task.dueTime ? `at ${task.dueTime}` : ""}
+                                </p>
+                                {canManageTasks ? (
+                                  <div className="mt-4 flex flex-wrap gap-2">
+                                    <Button variant="ghost" className="px-3 py-2 text-sm" onClick={() => updateTask(task, "in_progress")}>Start</Button>
+                                    <Button variant="secondary" className="px-3 py-2 text-sm" onClick={() => updateTask(task, "done")}>Mark complete</Button>
+                                  </div>
+                                ) : canCompleteTasks && task.assignedTo === bootstrap.viewer.id && task.status !== "done" ? (
+                                  <div className="mt-4 flex flex-wrap gap-2">
+                                    <Button variant="secondary" className="px-3 py-2 text-sm" onClick={() => updateTask(task, "done")}>Mark complete</Button>
+                                  </div>
+                                ) : null}
+                              </div>
+                            )}
+                          </Draggable>
+                        ))
+                      ) : (
+                        <div className="rounded-[24px] border border-dashed border-borderColor p-6 text-sm text-textSecondary text-center">
+                          Nothing here yet.
+                        </div>
+                      )}
+                      {provided.placeholder}
                     </div>
                   </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
+                )}
+              </Droppable>
+            ))}
+          </div>
+        </DragDropContext>
       </Card>
 
-      <Modal open={modalOpen} title="Add task" onClose={() => setModalOpen(false)}>
+      <Modal open={modalOpen && canManageTasks} title="Add task" onClose={() => setModalOpen(false)}>
         <form
           className="grid gap-4"
           onSubmit={(event) => {
@@ -211,7 +306,7 @@ export const TasksPage = () => {
             <Field label="Assign to">
               <Select value={form.assignedTo} onChange={(event) => setForm((current) => ({ ...current, assignedTo: event.target.value }))}>
                 <option value="">Choose a person</option>
-                {bootstrap.data.familyMembers.map((member) => (
+                {bootstrap.data.familyMembers.filter((member) => member.joinStatus === "active").map((member) => (
                   <option key={member.id} value={member.userId ?? member.id}>
                     {member.name}
                   </option>
@@ -226,7 +321,7 @@ export const TasksPage = () => {
         </form>
       </Modal>
 
-      <Modal open={suggestionsOpen} title="Suggested tasks to review" onClose={() => setSuggestionsOpen(false)}>
+      <Modal open={suggestionsOpen && canManageTasks && canViewAiInsights} title="Suggested tasks to review" onClose={() => setSuggestionsOpen(false)}>
         <div className="space-y-4">
           {suggestions.map((task) => (
             <div key={task.title} className="rounded-3xl border border-borderColor p-4">

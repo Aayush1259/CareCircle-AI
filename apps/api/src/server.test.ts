@@ -114,4 +114,45 @@ describe("CareCircle API", () => {
     expect(response.status).toBe(400);
     expect(response.body.message).toBe("Please write what was discussed before saving follow-up notes.");
   });
+
+  it("updates patient access permissions through settings access management", async () => {
+    const app = createServer();
+    const headers = await authHeader(app);
+    const bootstrapResponse = await request(app).get("/api/bootstrap").set(headers);
+    const accessRecord = bootstrapResponse.body.patientAccess.find((record: { accessRole: string; id: string; permissions: { canLogVitals: boolean } }) => record.accessRole === "family_member");
+
+    expect(accessRecord).toBeTruthy();
+
+    const response = await request(app)
+      .patch(`/api/settings/access/${accessRecord.id}`)
+      .set(headers)
+      .send({
+        permissions: {
+          ...accessRecord.permissions,
+          canLogVitals: true,
+        },
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.access.permissions.canLogVitals).toBe(true);
+  });
+
+  it("preserves an invited secondary caregiver role on login", async () => {
+    const app = createServer();
+    const loginResponse = await request(app).post("/api/auth/login").send({
+      email: "james@carecircle.ai",
+      password: "Demo1234",
+    });
+
+    expect(loginResponse.status).toBe(201);
+    expect(loginResponse.body.session.access.accessRole).toBe("secondary_caregiver");
+
+    const bootstrapResponse = await request(app)
+      .get("/api/bootstrap")
+      .set({ Authorization: `Bearer ${loginResponse.body.session.token}` });
+
+    expect(bootstrapResponse.status).toBe(200);
+    expect(bootstrapResponse.body.viewerAccess.accessRole).toBe("secondary_caregiver");
+    expect(bootstrapResponse.body.capabilities).not.toContain("manage_family");
+  });
 });

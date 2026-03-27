@@ -1,12 +1,15 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, useCallback } from "react";
 import toast from "react-hot-toast";
 import type { AuthSession, BootstrapPayload } from "@carecircle/shared";
-import { apiRequest, authStorageKey } from "@/lib/api";
+import { activePatientStorageKey, apiRequest, authStorageKey } from "@/lib/api";
 import { browserSupabase, googleAuthContextStorageKey, type GoogleAuthContext } from "@/lib/supabaseBrowser";
+
+type AppRuntimeConfig = BootstrapPayload["appConfig"];
 
 interface AppDataContextValue {
   session: AuthSession | null;
   bootstrap: BootstrapPayload | null;
+  appConfig: AppRuntimeConfig;
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
@@ -16,7 +19,7 @@ interface AppDataContextValue {
     name: string;
     email: string;
     password: string;
-    role: "caregiver" | "family_member" | "doctor";
+    role: "caregiver" | "family_member" | "doctor" | "primary_caregiver" | "secondary_caregiver";
     licenseNumber?: string;
   }) => Promise<AuthSession>;
   startGoogleAuth: (context: GoogleAuthContext) => Promise<void>;
@@ -31,9 +34,22 @@ const AppDataContext = createContext<AppDataContextValue | undefined>(undefined)
 export const AppDataProvider = ({ children }: { children: React.ReactNode }) => {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [bootstrap, setBootstrap] = useState<BootstrapPayload | null>(null);
+  const [appConfig, setAppConfig] = useState<AppRuntimeConfig>({ googleAuthEnabled: false });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const latestBootstrapRef = useRef<BootstrapPayload | null>(null);
+
+  const loadPublicConfig = useCallback(async () => {
+    try {
+      const config = await apiRequest<AppRuntimeConfig>("/config");
+      setAppConfig(config);
+      return config;
+    } catch {
+      const fallback = { googleAuthEnabled: false };
+      setAppConfig(fallback);
+      return fallback;
+    }
+  }, []);
 
   const announceIncomingChanges = useCallback((previous: BootstrapPayload | null, next: BootstrapPayload) => {
     if (!previous) return;
@@ -63,12 +79,14 @@ export const AppDataProvider = ({ children }: { children: React.ReactNode }) => 
       setLoading(true);
     }
     try {
+      await loadPublicConfig();
       const token = window.localStorage.getItem(authStorageKey);
       if (!token) {
         setSession(null);
         setBootstrap(null);
         setError(null);
         latestBootstrapRef.current = null;
+        window.sessionStorage.removeItem(activePatientStorageKey);
         return;
       }
 
@@ -81,17 +99,20 @@ export const AppDataProvider = ({ children }: { children: React.ReactNode }) => 
       }
       latestBootstrapRef.current = payload;
       setBootstrap(payload);
+      setAppConfig(payload.appConfig);
+      window.sessionStorage.setItem(activePatientStorageKey, payload.patient.id);
       setError(null);
     } catch (nextError) {
       window.localStorage.removeItem(authStorageKey);
       setSession(null);
       setBootstrap(null);
       latestBootstrapRef.current = null;
+      window.sessionStorage.removeItem(activePatientStorageKey);
       setError(nextError instanceof Error ? nextError.message : "Unable to load CareCircle right now.");
     } finally {
       setLoading(false);
     }
-  }, [announceIncomingChanges]);
+  }, [announceIncomingChanges, loadPublicConfig]);
 
   const refresh = useCallback(async () => {
     await loadAppState();
@@ -103,6 +124,8 @@ export const AppDataProvider = ({ children }: { children: React.ReactNode }) => 
     const bootstrapPayload = await apiRequest<BootstrapPayload>("/bootstrap");
     latestBootstrapRef.current = bootstrapPayload;
     setBootstrap(bootstrapPayload);
+    setAppConfig(bootstrapPayload.appConfig);
+    window.sessionStorage.setItem(activePatientStorageKey, bootstrapPayload.patient.id);
     setError(null);
   }, []);
 
@@ -130,7 +153,7 @@ export const AppDataProvider = ({ children }: { children: React.ReactNode }) => 
     name: string;
     email: string;
     password: string;
-    role: "caregiver" | "family_member" | "doctor";
+    role: "caregiver" | "family_member" | "doctor" | "primary_caregiver" | "secondary_caregiver";
     licenseNumber?: string;
   }) => {
     setLoading(true);
@@ -153,6 +176,9 @@ export const AppDataProvider = ({ children }: { children: React.ReactNode }) => 
   }, [finalizeAuthenticatedSession]);
 
   const startGoogleAuth = useCallback(async (context: GoogleAuthContext) => {
+    if (!appConfig.googleAuthEnabled) {
+      throw new Error("Google sign-in is hidden until the Google provider is fully configured in Supabase.");
+    }
     if (!browserSupabase) {
       throw new Error("Google sign-in is not available until Supabase browser auth is configured.");
     }
@@ -177,7 +203,7 @@ export const AppDataProvider = ({ children }: { children: React.ReactNode }) => 
       window.sessionStorage.removeItem(googleAuthContextStorageKey);
       throw new Error(authError.message);
     }
-  }, []);
+  }, [appConfig.googleAuthEnabled]);
 
   const completeGoogleAuth = useCallback(async () => {
     if (!browserSupabase) {
@@ -190,7 +216,11 @@ export const AppDataProvider = ({ children }: { children: React.ReactNode }) => 
       const code = searchParams.get("code");
       const providerError = searchParams.get("error_description") || searchParams.get("error");
       if (providerError) {
-        throw new Error(decodeURIComponent(providerError));
+        const decodedError = decodeURIComponent(providerError);
+        if (decodedError.toLowerCase().includes("missing oauth secret")) {
+          throw new Error("Google sign-in is not fully configured in Supabase yet. Add the Google OAuth client secret and callback URL first.");
+        }
+        throw new Error(decodedError);
       }
 
       const storedContext = window.sessionStorage.getItem(googleAuthContextStorageKey);
@@ -229,6 +259,7 @@ export const AppDataProvider = ({ children }: { children: React.ReactNode }) => 
       setSession(null);
       setBootstrap(null);
       latestBootstrapRef.current = null;
+      window.sessionStorage.removeItem(activePatientStorageKey);
       setError(nextError instanceof Error ? nextError.message : "Google sign-in could not be completed.");
       throw nextError;
     } finally {
@@ -251,21 +282,16 @@ export const AppDataProvider = ({ children }: { children: React.ReactNode }) => 
   }, []);
 
   const logout = useCallback(async () => {
-    try {
-      await apiRequest("/auth/logout", { method: "POST" });
-    } catch {
-      // Ignore logout network errors and clear the local session anyway.
-    } finally {
-      if (browserSupabase) {
-        void browserSupabase.auth.signOut();
-      }
-      window.sessionStorage.removeItem(googleAuthContextStorageKey);
-      window.localStorage.removeItem(authStorageKey);
-      setSession(null);
-      setBootstrap(null);
-      latestBootstrapRef.current = null;
-      setError(null);
+    if (browserSupabase) {
+      void browserSupabase.auth.signOut();
     }
+    window.sessionStorage.removeItem(googleAuthContextStorageKey);
+    window.sessionStorage.removeItem(activePatientStorageKey);
+    window.localStorage.removeItem(authStorageKey);
+    setSession(null);
+    setBootstrap(null);
+    latestBootstrapRef.current = null;
+    setError(null);
   }, []);
 
   useEffect(() => {
@@ -292,6 +318,7 @@ export const AppDataProvider = ({ children }: { children: React.ReactNode }) => 
     () => ({
       session,
       bootstrap,
+      appConfig,
       loading,
       error,
       refresh,
@@ -307,6 +334,7 @@ export const AppDataProvider = ({ children }: { children: React.ReactNode }) => 
     [
       session,
       bootstrap,
+      appConfig,
       loading,
       error,
       refresh,

@@ -3,17 +3,26 @@ import { CalendarDays, ClipboardCheck, HeartHandshake, MessageCircle, Pill, Shie
 import { Badge, Card, EmptyState, ProgressBar, SectionHeader } from "@/components/ui";
 import { useAppData } from "@/context/AppDataContext";
 import { formatDate, relativeTime } from "@/lib/format";
-import { roleLabel } from "@/lib/roles";
+import { resolveViewerRole, roleLabel } from "@/lib/roles";
 
 export const FamilyHomePage = () => {
   const { bootstrap } = useAppData();
   if (!bootstrap) return null;
 
   const { viewer, patient, dashboard, data } = bootstrap;
+  const viewerRole = resolveViewerRole(viewer.role, bootstrap.viewerAccess?.accessRole);
+  const permissions = bootstrap.permissions;
   const activeTasks = data.tasks.filter((task) => task.status !== "done");
   const upcomingAppointments = data.appointments.slice(0, 2);
   const activity = data.activityEvents.slice(0, 4);
   const messagePreview = data.familyMessages.slice(0, 2);
+  const permissionTier = bootstrap.viewerAccess?.accessLevel.replaceAll("_", " ") ?? "view only";
+  const quickLinks = [
+    permissions?.canViewFamily ? { icon: MessageCircle, label: "Check family chat", to: "/family" } : null,
+    permissions?.canViewMedications ? { icon: Pill, label: permissions.canLogMedications ? "Log medications" : "Review medications", to: "/medications" } : null,
+    permissions?.canViewTasks ? { icon: ClipboardCheck, label: permissions.canCompleteTasks ? "Update tasks" : "View tasks", to: "/tasks" } : null,
+    permissions?.canViewEmergency ? { icon: ShieldAlert, label: "Open emergency info", to: "/emergency" } : null,
+  ].filter(Boolean) as Array<{ icon: typeof MessageCircle; label: string; to: string }>;
 
   return (
     <div className="space-y-6">
@@ -22,7 +31,7 @@ export const FamilyHomePage = () => {
           <p className="eyebrow">Family view</p>
           <h1 className="mt-2 text-3xl font-bold text-textPrimary">A simpler space for helping out.</h1>
         </div>
-        <Badge tone="brand">{roleLabel(viewer.role)}</Badge>
+        <Badge tone="brand">{roleLabel(viewerRole)}</Badge>
       </div>
 
       <Card className="overflow-hidden bg-gradient-to-r from-brandDark to-brand text-white shadow-calm">
@@ -93,12 +102,7 @@ export const FamilyHomePage = () => {
         <Card>
           <SectionHeader title="What you can do here" description="This view keeps the work focused and easy to scan." />
           <div className="grid gap-3 sm:grid-cols-2">
-            {[
-              { icon: MessageCircle, label: "Check family chat", to: "/family" },
-              { icon: Pill, label: "Review medications", to: "/medications" },
-              { icon: ClipboardCheck, label: "Update tasks", to: "/tasks" },
-              { icon: ShieldAlert, label: "Open emergency info", to: "/emergency" },
-            ].map(({ icon: Icon, label, to }) => (
+            {quickLinks.map(({ icon: Icon, label, to }) => (
               <Link key={label} to={to} className="rounded-3xl border border-borderColor bg-surface p-4 transition hover:bg-brandSoft/35">
                 <Icon className="h-5 w-5 text-brandDark" />
                 <p className="mt-3 text-base font-semibold text-textPrimary">{label}</p>
@@ -108,7 +112,7 @@ export const FamilyHomePage = () => {
           <div className="mt-5 rounded-3xl bg-brandSoft/55 p-4">
             <p className="text-sm font-semibold text-textPrimary">Permissions</p>
             <p className="mt-1 text-sm text-textSecondary">
-              Family members can keep up with updates and help where they're invited to help.
+              You currently have {permissionTier} access for this patient, so CareCircle only shows the spaces you are invited to use.
             </p>
           </div>
         </Card>

@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ShieldCheck, UserPlus } from "lucide-react";
 import toast from "react-hot-toast";
+import type { PatientAccessRole } from "@carecircle/shared";
 import { Button, Card } from "@/components/ui";
 import { useAppData } from "@/context/AppDataContext";
-import { roleHomePath } from "@/lib/roles";
+import { resolveViewerRole, roleHomePath } from "@/lib/roles";
 
 export const InviteAcceptancePage = () => {
   const { token = "" } = useParams();
@@ -22,11 +23,14 @@ export const InviteAcceptancePage = () => {
 
     void (async () => {
       try {
-        await request(`/family/invite/${token}/accept`, { method: "POST" });
+        const result = await request<{ invite: { accessRole?: PatientAccessRole } }>(`/family/invite/${token}/accept`, { method: "POST" });
         await refresh();
         setStatus("accepted");
         toast.success("Invite accepted.");
-        navigate(roleHomePath(session.viewer.role), { replace: true });
+        navigate(
+          roleHomePath(resolveViewerRole(session.viewer.role, result.invite.accessRole ?? session.access?.accessRole)),
+          { replace: true },
+        );
       } catch (error) {
         setStatus("error");
         setMessage(error instanceof Error ? error.message : "We could not accept this invite right now.");

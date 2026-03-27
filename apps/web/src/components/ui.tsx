@@ -138,21 +138,25 @@ export const Select = ({ className, ...props }: React.SelectHTMLAttributes<HTMLS
 export const Toggle = ({
   checked,
   onChange,
+  disabled,
   "aria-label": ariaLabel,
 }: {
   checked: boolean;
   onChange: (value: boolean) => void;
+  disabled?: boolean;
   "aria-label"?: string;
 }) => (
   <div className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full">
     <button
       type="button"
       onClick={() => onChange(!checked)}
+      disabled={disabled}
       className={cn(
         "relative h-[26px] w-[48px] overflow-hidden rounded-full border border-black/5 p-[3px] shadow-[inset_0_1px_2px_rgba(15,23,42,0.18)] transition-all duration-[220ms] [transition-timing-function:cubic-bezier(0.4,0,0.2,1)] focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand",
         checked
           ? "bg-gradient-to-b from-brand to-brandDark"
           : "bg-gradient-to-b from-slate-200 to-slate-300",
+        disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
       )}
       role="switch"
       aria-checked={checked}

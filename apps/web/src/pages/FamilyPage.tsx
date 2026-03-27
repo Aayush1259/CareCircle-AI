@@ -35,6 +35,7 @@ const emojiMap = [
 const roleTone: Record<FamilyRole, "brand" | "neutral" | "warning"> = {
   primary_caregiver: "brand",
   secondary_caregiver: "neutral",
+  family_member: "warning",
   family: "warning",
   emergency_contact: "warning",
 };
@@ -101,7 +102,7 @@ export const FamilyPage = () => {
   const [feedCount, setFeedCount] = useState(20);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [taskEditorOpen, setTaskEditorOpen] = useState(false);
-  const [inviteForm, setInviteForm] = useState({ name: "", email: "", role: "family" as FamilyRole });
+  const [inviteForm, setInviteForm] = useState({ name: "", email: "", role: "family_member" as FamilyRole });
   const [taskDraft, setTaskDraft] = useState(emptyTaskDraft);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [weeklySummary, setWeeklySummary] = useState(
@@ -127,6 +128,9 @@ export const FamilyPage = () => {
 
   if (!bootstrap) return null;
 
+  const canManageFamily = bootstrap.capabilities.includes("manage_family");
+  const canManageTasks = bootstrap.capabilities.includes("manage_tasks");
+  const canCompleteTasks = bootstrap.capabilities.includes("complete_tasks");
   const pendingInvites = bootstrap.data.familyMembers.filter((member) => member.joinStatus === "pending");
   const activeMembers = bootstrap.data.familyMembers.filter((member) => member.joinStatus !== "pending");
   const pinnedMessages = familyMessages.filter((message) => message.isPinned);
@@ -172,7 +176,7 @@ export const FamilyPage = () => {
       });
       toast.success("Invite sent.");
       setInviteOpen(false);
-      setInviteForm({ name: "", email: "", role: "family" });
+      setInviteForm({ name: "", email: "", role: "family_member" });
       await refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Please try again.");
@@ -330,6 +334,7 @@ export const FamilyPage = () => {
   };
 
   const onDragEnd = async (result: DropResult) => {
+    if (!canManageTasks) return;
     if (!result.destination) return;
     const sourceId = result.source.droppableId as TaskStatus;
     const destinationId = result.destination.droppableId as TaskStatus;
@@ -352,7 +357,9 @@ export const FamilyPage = () => {
           <SectionHeader
             title="Family members"
             description="Who is helping right now, what they can do, and who is still waiting on an invite."
-            action={<Button onClick={() => setInviteOpen(true)}><UserPlus className="h-4 w-4" />Invite Member</Button>}
+            action={
+              canManageFamily ? <Button onClick={() => setInviteOpen(true)}><UserPlus className="h-4 w-4" />Invite Member</Button> : undefined
+            }
           />
           <div className="space-y-3">
             {activeMembers.map((member) => {
@@ -370,16 +377,18 @@ export const FamilyPage = () => {
                   <div className="text-right">
                     <Badge tone={roleTone[member.role]}>{member.role.replaceAll("_", " ")}</Badge>
                     <p className="mt-1 text-xs text-textSecondary">{online ? "Online now" : member.lastActive ? relativeTime(member.lastActive) : "Recently"}</p>
-                    <button type="button" className="mt-2 text-xs font-semibold text-red-700 hover:text-red-800" onClick={() => void removeMember(member.id)}>
-                      Remove
-                    </button>
+                    {canManageFamily ? (
+                      <button type="button" className="mt-2 text-xs font-semibold text-red-700 hover:text-red-800" onClick={() => void removeMember(member.id)}>
+                        Remove
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               );
             })}
           </div>
 
-          {pendingInvites.length ? (
+          {canManageFamily && pendingInvites.length ? (
             <div className="mt-5 rounded-3xl bg-slate-50 p-4">
               <p className="font-semibold text-textPrimary">Pending invites</p>
               <div className="mt-3 space-y-3">
@@ -479,10 +488,12 @@ export const FamilyPage = () => {
                       <p className="mt-1 text-sm leading-7">{message.messageText}</p>
                       <div className={`mt-2 flex items-center justify-between gap-3 text-xs ${ownMessage ? "text-white/80" : "text-textSecondary"}`}>
                         <span>{formatMessageTime(message.createdAt)}</span>
-                        <button type="button" className="inline-flex items-center gap-1 font-semibold" onClick={() => void pinMessage(message.id, !message.isPinned)}>
-                          <Pin className="h-3.5 w-3.5" />
-                          {message.isPinned ? "Unpin" : "Pin"}
-                        </button>
+                        {canManageFamily ? (
+                          <button type="button" className="inline-flex items-center gap-1 font-semibold" onClick={() => void pinMessage(message.id, !message.isPinned)}>
+                            <Pin className="h-3.5 w-3.5" />
+                            {message.isPinned ? "Unpin" : "Pin"}
+                          </button>
+                        ) : null}
                       </div>
                     </div>
                   </div>
@@ -532,14 +543,16 @@ export const FamilyPage = () => {
                       <p className="font-semibold text-textPrimary">{column.title}</p>
                       <Badge tone={column.id === "overdue" ? "danger" : "neutral"}>{items.length}</Badge>
                     </div>
-                    <button
-                      type="button"
-                      className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-borderColor bg-white text-textSecondary hover:text-brandDark"
-                      aria-label={`Add task to ${column.title}`}
-                      onClick={() => openTaskEditor(undefined, column.id)}
-                    >
-                      <Plus className="h-4 w-4" />
-                    </button>
+                    {canManageTasks ? (
+                      <button
+                        type="button"
+                        className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-borderColor bg-white text-textSecondary hover:text-brandDark"
+                        aria-label={`Add task to ${column.title}`}
+                        onClick={() => openTaskEditor(undefined, column.id)}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </button>
+                    ) : null}
                   </div>
 
                   <Droppable droppableId={column.id}>
@@ -564,8 +577,16 @@ export const FamilyPage = () => {
                                   type="button"
                                   ref={dragProvided.innerRef}
                                   {...dragProvided.draggableProps}
-                                  {...dragProvided.dragHandleProps}
-                                  onClick={() => openTaskEditor(task)}
+                                  {...(canManageTasks ? dragProvided.dragHandleProps : {})}
+                                  onClick={() => {
+                                    if (canManageTasks) {
+                                      openTaskEditor(task);
+                                      return;
+                                    }
+                                    if (canCompleteTasks && task.assignedTo === bootstrap.viewer.id && task.boardStatus !== "done") {
+                                      void updateTaskStatus(task, "done");
+                                    }
+                                  }}
                                   className={`w-full rounded-2xl border bg-white p-4 text-left shadow-sm transition ${
                                     dragSnapshot.isDragging ? "border-brand shadow-lg" : task.boardStatus === "overdue" ? "border-danger/30" : "border-borderColor"
                                   }`}
@@ -608,9 +629,8 @@ export const FamilyPage = () => {
           </Field>
           <Field label="Role">
             <Select value={inviteForm.role} onChange={(event) => setInviteForm((current) => ({ ...current, role: event.target.value as FamilyRole }))}>
-              <option value="family">Family</option>
+              <option value="family_member">Family member</option>
               <option value="secondary_caregiver">Helper</option>
-              <option value="primary_caregiver">Primary caregiver</option>
             </Select>
           </Field>
           <Button onClick={inviteFamily}>Send Invite</Button>

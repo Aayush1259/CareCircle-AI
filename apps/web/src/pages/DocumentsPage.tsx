@@ -39,6 +39,10 @@ export const DocumentsPage = () => {
 
   if (!bootstrap) return null;
 
+  const hasProcessingDocuments = bootstrap.data.documents.some((document) =>
+    document.processingStatus === "queued" || document.processingStatus === "processing",
+  );
+
   useEffect(() => {
     let cancelled = false;
 
@@ -79,6 +83,14 @@ export const DocumentsPage = () => {
       cancelled = true;
     };
   }, [request, selectedDocument]);
+
+  useEffect(() => {
+    if (!hasProcessingDocuments) return undefined;
+    const timeout = window.setTimeout(() => {
+      void refresh();
+    }, 3000);
+    return () => window.clearTimeout(timeout);
+  }, [hasProcessingDocuments, refresh]);
 
   const validateFile = (file?: File | null) => {
     if (!file) return null;
@@ -143,7 +155,7 @@ export const DocumentsPage = () => {
         method: "POST",
         body: formData,
       });
-      toast.success("Document processed - AI analysis ready.");
+      toast.success("Document uploaded. AI analysis is running in the background.");
       clearPendingFile();
       setNotes("");
       setDocumentDate(new Date().toISOString().slice(0, 10));
@@ -184,6 +196,14 @@ export const DocumentsPage = () => {
         return right.uploadDate.localeCompare(left.uploadDate);
       });
   }, [bootstrap.data.documents, categoryFilter, dateRange, search, sort]);
+
+  const getProcessingBadge = (document: DocumentRecord) => {
+    if (document.processingStatus === "failed") return { tone: "danger" as const, label: "Processing failed" };
+    if (document.processingStatus === "processing") return { tone: "warning" as const, label: "Analyzing..." };
+    if (document.processingStatus === "queued") return { tone: "warning" as const, label: "Queued" };
+    if (document.isLowConfidence) return { tone: "warning" as const, label: "Needs review" };
+    return { tone: "success" as const, label: "Analyzed" };
+  };
 
   const updateCategory = async (nextCategory: DocumentRecord["documentCategory"]) => {
     if (!selectedDocument) return;
@@ -309,7 +329,7 @@ export const DocumentsPage = () => {
               <Textarea value={notes} placeholder="Anything helpful to remember about this file?" onChange={(event) => setNotes(event.target.value)} />
             </Field>
             <Button onClick={() => void uploadFile()} disabled={!pendingFile || uploading}>
-              {uploading ? "Processing your document..." : "Upload & Analyze"}
+              {uploading ? "Uploading..." : "Upload & Analyze"}
             </Button>
           </div>
         </div>
@@ -360,9 +380,7 @@ export const DocumentsPage = () => {
                   </div>
                   <div className={`${viewMode === "list" ? "min-w-0 flex-1" : "mt-4"}`}>
                     <div className="flex flex-wrap items-center gap-2">
-                      <Badge tone={document.isProcessed ? "success" : "warning"}>
-                        {document.isProcessed ? "Analyzed" : "Processing..."}
-                      </Badge>
+                      <Badge tone={getProcessingBadge(document).tone}>{getProcessingBadge(document).label}</Badge>
                       {document.aiSummary.severityFlag !== "normal" ? (
                         <Badge tone={document.aiSummary.severityFlag === "urgent" ? "danger" : "warning"}>
                           {document.aiSummary.severityFlag === "urgent" ? "Urgent" : "Needs Review"}
@@ -371,7 +389,13 @@ export const DocumentsPage = () => {
                     </div>
                     <p className="mt-3 text-lg font-bold text-textPrimary">{document.fileName}</p>
                     <p className="mt-1 text-sm text-textSecondary">{formatDate(document.documentDate)} | Uploaded {formatDate(document.uploadDate)}</p>
-                    <p className="mt-3 line-clamp-2 text-sm text-textSecondary">{document.aiSummary.summary}</p>
+                    <p className="mt-3 line-clamp-2 text-sm text-textSecondary">
+                      {document.processingStatus === "queued" || document.processingStatus === "processing"
+                        ? "CareCircle is extracting text and preparing an AI summary."
+                        : document.processingStatus === "failed"
+                          ? (document.processingError || "CareCircle could not finish analyzing this file.")
+                          : document.aiSummary.summary}
+                    </p>
                   </div>
                 </div>
               </button>
@@ -408,46 +432,67 @@ export const DocumentsPage = () => {
             </div>
 
             <div className="space-y-4">
+              <div className="rounded-[28px] border border-borderColor bg-surface p-5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge tone={getProcessingBadge(selectedDocument).tone}>{getProcessingBadge(selectedDocument).label}</Badge>
+                  {selectedDocument.processingStatus === "ready" ? (
+                    <Badge tone="neutral">AI-generated · Not a medical diagnosis · Consult your doctor</Badge>
+                  ) : null}
+                </div>
+                {selectedDocument.processingStatus === "processing" || selectedDocument.processingStatus === "queued" ? (
+                  <p className="mt-3 text-sm text-textSecondary">
+                    CareCircle is still working on this file. You can keep using the app and come back in a moment.
+                  </p>
+                ) : selectedDocument.processingStatus === "failed" ? (
+                  <p className="mt-3 text-sm text-danger">
+                    {selectedDocument.processingError || "CareCircle could not finish the AI analysis for this document."}
+                  </p>
+                ) : null}
+              </div>
               <div className="rounded-[28px] bg-brandSoft p-5">
                 <p className="text-sm font-semibold uppercase tracking-[0.18em] text-brandDark">Plain English summary</p>
                 <p className="mt-3 text-base text-textPrimary">{selectedDocument.aiSummary.summary}</p>
               </div>
-              <div className="rounded-[28px] bg-red-50 p-5">
-                <p className="font-semibold text-red-700">Action items</p>
-                <ul className="mt-2 space-y-2 text-sm text-red-700/80">
-                  {selectedDocument.aiSummary.actionItems.map((item) => (
-                    <li key={item}>- {item}</li>
-                  ))}
-                </ul>
-              </div>
-              <div className="rounded-[28px] bg-sky-50 p-5">
-                <p className="font-semibold text-sky-800">Important dates</p>
-                <ul className="mt-2 space-y-2 text-sm text-sky-900/80">
-                  {selectedDocument.aiSummary.importantDates.map((item) => (
-                    <li key={`${item.date}-${item.description}`}>
-                      {item.date}: {item.description}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div className="rounded-[28px] border border-borderColor p-5">
-                <p className="font-semibold text-textPrimary">Medical terms explained</p>
-                <ul className="mt-2 space-y-3 text-sm text-textSecondary">
-                  {selectedDocument.aiSummary.medicalTerms.map((item) => (
-                    <li key={item.term}>
-                      <strong className="text-textPrimary">{item.term}:</strong> {item.plainEnglish}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div className="rounded-[28px] border border-borderColor p-5">
-                <p className="font-semibold text-textPrimary">Questions for your doctor</p>
-                <ul className="mt-2 space-y-2 text-sm text-textSecondary">
-                  {selectedDocument.aiSummary.doctorQuestions.map((item) => (
-                    <li key={item}>- {item}</li>
-                  ))}
-                </ul>
-              </div>
+              {selectedDocument.processingStatus === "ready" && !selectedDocument.isLowConfidence ? (
+                <>
+                  <div className="rounded-[28px] bg-red-50 p-5">
+                    <p className="font-semibold text-red-700">Action items</p>
+                    <ul className="mt-2 space-y-2 text-sm text-red-700/80">
+                      {selectedDocument.aiSummary.actionItems.map((item) => (
+                        <li key={item}>- {item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="rounded-[28px] bg-sky-50 p-5">
+                    <p className="font-semibold text-sky-800">Important dates</p>
+                    <ul className="mt-2 space-y-2 text-sm text-sky-900/80">
+                      {selectedDocument.aiSummary.importantDates.map((item) => (
+                        <li key={`${item.date}-${item.description}`}>
+                          {item.date}: {item.description}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="rounded-[28px] border border-borderColor p-5">
+                    <p className="font-semibold text-textPrimary">Medical terms explained</p>
+                    <ul className="mt-2 space-y-3 text-sm text-textSecondary">
+                      {selectedDocument.aiSummary.medicalTerms.map((item) => (
+                        <li key={item.term}>
+                          <strong className="text-textPrimary">{item.term}:</strong> {item.plainEnglish}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="rounded-[28px] border border-borderColor p-5">
+                    <p className="font-semibold text-textPrimary">Questions for your doctor</p>
+                    <ul className="mt-2 space-y-2 text-sm text-textSecondary">
+                      {selectedDocument.aiSummary.doctorQuestions.map((item) => (
+                        <li key={item}>- {item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </>
+              ) : null}
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field label="Category">
                   <Select value={selectedDocument.documentCategory} onChange={(event) => void updateCategory(event.target.value as DocumentRecord["documentCategory"])}>
@@ -457,7 +502,7 @@ export const DocumentsPage = () => {
                   </Select>
                 </Field>
                 <Field label="AI tools">
-                  <Button className="w-full" variant="secondary" onClick={() => void reprocessDocument()}>
+                  <Button className="w-full" variant="secondary" onClick={() => void reprocessDocument()} disabled={selectedDocument.processingStatus === "queued" || selectedDocument.processingStatus === "processing"}>
                     Reprocess with AI
                   </Button>
                 </Field>

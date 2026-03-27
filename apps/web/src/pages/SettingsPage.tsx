@@ -1,24 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Download, ExternalLink, PlayCircle, Send, Trash2, UploadCloud } from "lucide-react";
+import { Download, ExternalLink, PlayCircle, Send, Trash2, ShieldAlert } from "lucide-react";
 import toast from "react-hot-toast";
 import type { FeedbackSubject } from "@carecircle/shared";
-import { Badge, Button, Card, Field, Input, Modal, SectionHeader, Select, Textarea, Toggle } from "@/components/ui";
+import { Button, Card, Field, Input, Modal, SectionHeader, Select, Textarea, Toggle } from "@/components/ui";
 import { useAppData } from "@/context/AppDataContext";
 import { apiBase } from "@/lib/api";
 import { formatDate } from "@/lib/format";
-import { roleLabel, roleDescription } from "@/lib/roles";
-import { hasText, trimmedText } from "@/lib/validation";
+import { trimmedText } from "@/lib/validation";
 
-const commonConditions = [
-  "Type 2 Diabetes", "Hypertension", "Alzheimer's Disease", "Arthritis", "Heart Failure", "COPD", "Asthma", "Osteoporosis",
-  "Parkinson's Disease", "Chronic Kidney Disease", "Depression", "Anxiety", "Stroke", "Atrial Fibrillation", "High Cholesterol",
-  "Coronary Artery Disease", "Dementia", "Early-stage Alzheimer's", "Neuropathy", "Macular Degeneration", "Glaucoma", "Sleep Apnea",
-  "Hypothyroidism", "Hyperthyroidism", "Anemia", "Chronic Pain", "Migraines", "GERD", "IBS", "Constipation", "Urinary Incontinence",
-  "Osteoarthritis", "Rheumatoid Arthritis", "Peripheral Artery Disease", "Obesity", "Cancer", "Liver Disease", "Epilepsy",
-  "Seizure Disorder", "Fibromyalgia", "Balance Issues", "Hearing Loss", "Vision Loss", "Insomnia", "Anxiety Disorder",
-  "Bipolar Disorder", "Post-surgical Recovery", "Fall Risk", "Frailty", "Memory Loss", "Diabetic Retinopathy", "Chronic Wounds",
-];
+import { ProfileEditor } from "@/components/settings/ProfileEditor";
+import { PatientEditor } from "@/components/settings/PatientEditor";
+import { AccessManager } from "@/components/settings/AccessManager";
 
 const videoGuides = [
   { title: "Dashboard basics", description: "See what matters today in one glance.", url: "https://www.youtube.com/embed/dQw4w9WgXcQ" },
@@ -41,26 +34,10 @@ const faqs = [
   ["What do I do if I find incorrect AI information?", "Please tell your doctor for medical decisions and send us feedback so we can review the response quickly."],
 ] as const;
 
-const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const phonePattern = /^\+1 \d{3}-\d{3}-\d{4}$/;
-
 const initialFeedback = {
   subject: "bug_report" as FeedbackSubject,
   message: "",
   replyEmail: "",
-};
-
-const formatPhoneInput = (value: string) => {
-  const digits = value.replace(/\D/g, "").slice(0, 11);
-  const normalized = digits.startsWith("1") ? digits : `1${digits}`;
-  const core = normalized.slice(1);
-  const area = core.slice(0, 3);
-  const middle = core.slice(3, 6);
-  const end = core.slice(6, 10);
-  if (!area) return "+1 ";
-  if (!middle) return `+1 ${area}`;
-  if (!end) return `+1 ${area}-${middle}`;
-  return `+1 ${area}-${middle}-${end}`;
 };
 
 export const SettingsPage = () => {
@@ -72,61 +49,17 @@ export const SettingsPage = () => {
   const [deleteText, setDeleteText] = useState("");
   const [feedbackForm, setFeedbackForm] = useState(initialFeedback);
   const [savedToggleKey, setSavedToggleKey] = useState("");
-  const [profileSaving, setProfileSaving] = useState(false);
-  const [patientSaving, setPatientSaving] = useState(false);
   const [feedbackSaving, setFeedbackSaving] = useState(false);
+
+  // Tabbed layout state
+  const activeTab = params.get("tab") || "profile";
+
   const currentSettings = bootstrap?.data.settings.find((item) => item.userId === bootstrap.viewer.id);
-  const section = params.get("section") ?? "";
-
-  const [profile, setProfile] = useState(() => ({
-    name: bootstrap?.viewer.name ?? "",
-    email: bootstrap?.viewer.email ?? "",
-    phone: bootstrap?.viewer.phone ? formatPhoneInput(bootstrap.viewer.phone) : "",
-    photoUrl: bootstrap?.viewer.photoUrl ?? "",
-  }));
-
-  const [patientProfile, setPatientProfile] = useState(() => ({
-    name: bootstrap?.patient.name ?? "",
-    dateOfBirth: bootstrap?.patient.dateOfBirth ?? "",
-    photoUrl: bootstrap?.patient.photoUrl ?? "",
-    primaryDiagnosis: bootstrap?.patient.primaryDiagnosis ?? "",
-    secondaryConditions: bootstrap?.patient.secondaryConditions ?? [],
-    primaryDoctorName: bootstrap?.patient.primaryDoctorName ?? "",
-    primaryDoctorPhone: bootstrap?.patient.primaryDoctorPhone ? formatPhoneInput(bootstrap.patient.primaryDoctorPhone) : "",
-    hospitalPreference: bootstrap?.patient.hospitalPreference ?? "",
-    insuranceProvider: bootstrap?.patient.insuranceProvider ?? "",
-    insuranceId: bootstrap?.patient.insuranceId ?? "",
-    bloodType: bootstrap?.patient.bloodType ?? "",
-    allergies: bootstrap?.patient.allergies ?? [],
-    mobilityLevel: bootstrap?.patient.mobilityLevel ?? "",
-  }));
-
-  const [conditionDraft, setConditionDraft] = useState("");
-  const [allergyDraft, setAllergyDraft] = useState("");
-  const [profileErrors, setProfileErrors] = useState<Record<string, string>>({});
-  const [patientErrors, setPatientErrors] = useState<Record<string, string>>({});
+  const canEditPatient = bootstrap?.capabilities.includes("edit_patient") ?? false;
   const canExport = bootstrap?.capabilities.includes("export_data") ?? false;
+  const canViewAuditLog = bootstrap?.capabilities.includes("view_audit_log") ?? false;
   const securityAuditLogs = bootstrap?.data.securityAuditLogs.slice(0, 6) ?? [];
-
-  useEffect(() => {
-    const sectionToId: Record<string, string> = {
-      profile: "settings-profile",
-      preferences: "settings-display",
-      display: "settings-display",
-      notifications: "settings-notifications",
-      privacy: "settings-privacy",
-      access: "settings-access",
-      support: "settings-support",
-      patient: "settings-patient",
-    };
-
-    const elementId = sectionToId[section];
-    if (!elementId) return;
-
-    window.requestAnimationFrame(() => {
-      document.getElementById(elementId)?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-  }, [section]);
+  const canManageFamily = bootstrap?.capabilities.includes("manage_family") ?? false;
 
   useEffect(() => {
     const token = params.get("confirmEmail");
@@ -147,117 +80,13 @@ export const SettingsPage = () => {
     })();
   }, [params, request, refresh, setParams]);
 
+  useEffect(() => {
+    if ((activeTab === "team" && !canManageFamily) || (activeTab === "patient" && !canEditPatient)) {
+      setParams({ tab: "profile" }, { replace: true });
+    }
+  }, [activeTab, canEditPatient, canManageFamily, setParams]);
+
   if (!bootstrap || !currentSettings) return null;
-
-  const profileDirty = useMemo(
-    () =>
-      profile.name !== bootstrap.viewer.name ||
-      profile.email !== bootstrap.viewer.email ||
-      trimmedText(profile.phone) !== trimmedText(bootstrap.viewer.phone ? formatPhoneInput(bootstrap.viewer.phone) : "") ||
-      profile.photoUrl !== (bootstrap.viewer.photoUrl ?? ""),
-    [bootstrap.viewer, profile],
-  );
-
-  const patientDirty = useMemo(
-    () => JSON.stringify(patientProfile) !== JSON.stringify({
-      name: bootstrap.patient.name,
-      dateOfBirth: bootstrap.patient.dateOfBirth,
-      photoUrl: bootstrap.patient.photoUrl ?? "",
-      primaryDiagnosis: bootstrap.patient.primaryDiagnosis,
-      secondaryConditions: bootstrap.patient.secondaryConditions,
-      primaryDoctorName: bootstrap.patient.primaryDoctorName,
-      primaryDoctorPhone: bootstrap.patient.primaryDoctorPhone ? formatPhoneInput(bootstrap.patient.primaryDoctorPhone) : "",
-      hospitalPreference: bootstrap.patient.hospitalPreference,
-      insuranceProvider: bootstrap.patient.insuranceProvider,
-      insuranceId: bootstrap.patient.insuranceId,
-      bloodType: bootstrap.patient.bloodType,
-      allergies: bootstrap.patient.allergies,
-      mobilityLevel: bootstrap.patient.mobilityLevel,
-    }),
-    [bootstrap.patient, patientProfile],
-  );
-
-  const uploadImage = async (file: File, target: "profile" | "patient") => {
-    const formData = new FormData();
-    formData.append("file", file);
-    const result = await request<{ fileUrl: string }>("/uploads/image", {
-      method: "POST",
-      body: formData,
-    });
-    if (target === "profile") setProfile((current) => ({ ...current, photoUrl: result.fileUrl }));
-    if (target === "patient") setPatientProfile((current) => ({ ...current, photoUrl: result.fileUrl }));
-    toast.success("Photo uploaded.");
-  };
-
-  const validateProfile = () => {
-    const nextErrors: Record<string, string> = {};
-    if (!hasText(profile.name)) nextErrors.name = "Please enter your name.";
-    if (!emailPattern.test(trimmedText(profile.email))) nextErrors.email = "Please enter a valid email address.";
-    if (hasText(profile.phone) && !phonePattern.test(trimmedText(profile.phone))) nextErrors.phone = "Use the format +1 555-123-4567.";
-    setProfileErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
-  };
-
-  const validatePatient = () => {
-    const nextErrors: Record<string, string> = {};
-    if (!hasText(patientProfile.name)) nextErrors.name = "Please enter your loved one's name.";
-    if (!hasText(patientProfile.dateOfBirth)) nextErrors.dateOfBirth = "Please enter a birth date.";
-    if (hasText(patientProfile.primaryDoctorPhone) && !phonePattern.test(trimmedText(patientProfile.primaryDoctorPhone))) {
-      nextErrors.primaryDoctorPhone = "Use the format +1 555-123-4567.";
-    }
-    setPatientErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
-  };
-
-  const saveProfile = async () => {
-    if (!validateProfile()) return;
-    setProfileSaving(true);
-    try {
-      await request("/settings/profile", {
-        method: "PUT",
-        body: JSON.stringify({
-          name: trimmedText(profile.name),
-          phone: trimmedText(profile.phone),
-          photoUrl: trimmedText(profile.photoUrl),
-        }),
-      });
-
-      if (trimmedText(profile.email).toLowerCase() !== bootstrap.viewer.email.toLowerCase()) {
-        await request("/settings/profile/email-change/request", {
-          method: "POST",
-          body: JSON.stringify({ email: trimmedText(profile.email).toLowerCase() }),
-        });
-        toast.success("We emailed a confirmation link for the new address.");
-      } else {
-        toast.success("Profile saved!");
-      }
-      await refresh();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Please try again.");
-    } finally {
-      setProfileSaving(false);
-    }
-  };
-
-  const savePatient = async () => {
-    if (!validatePatient()) return;
-    setPatientSaving(true);
-    try {
-      await request("/settings/patient", {
-        method: "PUT",
-        body: JSON.stringify({
-          ...patientProfile,
-          primaryDoctorPhone: trimmedText(patientProfile.primaryDoctorPhone),
-        }),
-      });
-      toast.success("Patient profile saved!");
-      await refresh();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Please try again.");
-    } finally {
-      setPatientSaving(false);
-    }
-  };
 
   const updateNotification = async (key: string, value: unknown) => {
     try {
@@ -313,370 +142,235 @@ export const SettingsPage = () => {
     }
   };
 
+  const tabs = [
+    { id: "profile", label: "My Profile" },
+    { id: "patient", label: "Patient Info", visible: canEditPatient },
+    { id: "team", label: "Team Access", visible: canManageFamily },
+    { id: "notifications", label: "Notifications" },
+    { id: "security", label: "Security & Data" },
+    { id: "support", label: "Help & Support" },
+  ].filter((t) => t.visible !== false);
+
+  const handleTabChange = (tabId: string) => {
+    setParams({ tab: tabId }, { replace: true });
+  };
+
   return (
     <div className="space-y-6">
-      <Card id="settings-access" className="scroll-mt-24 border-brand/10 bg-brandSoft/20">
-        <SectionHeader
-          title="Access overview"
-          description="This page shows your personal account settings and the patient-specific permissions attached to your role."
-        />
-        <div className="grid gap-4 lg:grid-cols-3">
-          <div className="rounded-3xl border border-borderColor bg-surface p-4">
-            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-textSecondary">Signed in as</p>
-            <p className="mt-2 text-xl font-bold text-textPrimary">{bootstrap.viewer.name}</p>
-            <p className="mt-1 text-sm text-textSecondary">{bootstrap.viewer.email}</p>
-          </div>
-          <div className="rounded-3xl border border-borderColor bg-surface p-4">
-            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-textSecondary">Login role</p>
-            <p className="mt-2 text-xl font-bold text-textPrimary">{roleLabel(bootstrap.viewer.role)}</p>
-            <p className="mt-1 text-sm text-textSecondary">{roleDescription(bootstrap.viewer.role)}</p>
-          </div>
-          <div className="rounded-3xl border border-borderColor bg-surface p-4">
-            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-textSecondary">Patient access</p>
-            <p className="mt-2 text-xl font-bold text-textPrimary">
-              {bootstrap.viewerAccess ? bootstrap.viewerAccess.accessLevel.replaceAll("_", " ") : "No patient access record"}
-            </p>
-            <p className="mt-1 text-sm text-textSecondary">
-              {bootstrap.viewerAccess ? `${bootstrap.viewerAccess.accessRole.replaceAll("_", " ")} access for the active patient` : "Permissions will appear once an access record exists."}
-            </p>
-          </div>
-        </div>
-        <div className="mt-4 flex flex-wrap gap-2">
-          {bootstrap.capabilities.map((capability) => (
-            <Badge key={capability} tone="brand">
-              {capability.replaceAll("_", " ")}
-            </Badge>
+      {/* Horizontal Tabs */}
+      <div className="-mx-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
+        <div className="inline-flex space-x-2 rounded-full border border-borderColor bg-white p-1 shadow-calm">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => handleTabChange(tab.id)}
+              className={`rounded-full px-5 py-2.5 text-sm font-semibold transition-all ${
+                activeTab === tab.id
+                  ? "bg-brand text-white shadow-md"
+                  : "text-textSecondary hover:bg-slate-50 hover:text-textPrimary"
+              }`}
+            >
+              {tab.label}
+            </button>
           ))}
         </div>
-      </Card>
-
-      <div className="grid gap-6 xl:grid-cols-2">
-        <Card id="settings-profile" className="scroll-mt-24">
-          <SectionHeader title="Profile" description="Keep your contact details and photo up to date." />
-          <div className="grid gap-4">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-              <label className="flex h-24 w-24 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-borderColor bg-brandSoft text-brandDark">
-                {profile.photoUrl ? <img src={profile.photoUrl} alt="Caregiver profile" className="h-full w-full object-cover" /> : <UploadCloud className="h-8 w-8" />}
-                <input className="hidden" type="file" accept="image/*" onChange={(event) => event.target.files?.[0] && void uploadImage(event.target.files[0], "profile")} />
-              </label>
-              <div>
-                <p className="text-base font-semibold text-textPrimary">Your photo</p>
-                <p className="text-sm text-textSecondary">Tap the circle to upload a new image.</p>
-              </div>
-            </div>
-            <Field label="Full name">
-              <Input value={profile.name} onChange={(event) => setProfile((current) => ({ ...current, name: event.target.value }))} className={profileErrors.name ? "border-danger" : ""} />
-              {profileErrors.name ? <p className="mt-2 text-sm text-danger">{profileErrors.name}</p> : null}
-            </Field>
-            <Field label="Email">
-              <Input type="email" value={profile.email} onChange={(event) => setProfile((current) => ({ ...current, email: event.target.value }))} className={profileErrors.email ? "border-danger" : ""} />
-              {profileErrors.email ? <p className="mt-2 text-sm text-danger">{profileErrors.email}</p> : null}
-            </Field>
-            <Field label="Phone">
-              <Input value={profile.phone} placeholder="+1 555-123-4567" onChange={(event) => setProfile((current) => ({ ...current, phone: formatPhoneInput(event.target.value) }))} className={profileErrors.phone ? "border-danger" : ""} />
-              {profileErrors.phone ? <p className="mt-2 text-sm text-danger">{profileErrors.phone}</p> : null}
-            </Field>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm text-textSecondary">Last updated {currentSettings.updatedAt ? formatDate(currentSettings.updatedAt) : "today"}</p>
-              <Button disabled={!profileDirty || profileSaving} onClick={saveProfile}>
-                {profileSaving ? "Saving profile..." : "Save Profile"}
-              </Button>
-            </div>
-          </div>
-        </Card>
-
-        <Card id="settings-patient" className="scroll-mt-24">
-          <SectionHeader title="Patient profile" description="Everything responders, doctors, and family members need in one place." />
-          <div className="grid gap-4">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-              <label className="flex h-24 w-24 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-borderColor bg-brandSoft text-brandDark">
-                {patientProfile.photoUrl ? <img src={patientProfile.photoUrl} alt="Patient profile" className="h-full w-full object-cover" /> : <UploadCloud className="h-8 w-8" />}
-                <input className="hidden" type="file" accept="image/*" onChange={(event) => event.target.files?.[0] && void uploadImage(event.target.files[0], "patient")} />
-              </label>
-              <div>
-                <p className="text-base font-semibold text-textPrimary">Patient photo</p>
-                <p className="text-sm text-textSecondary">Tap to upload or replace the current photo.</p>
-              </div>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Name">
-                <Input value={patientProfile.name} onChange={(event) => setPatientProfile((current) => ({ ...current, name: event.target.value }))} className={patientErrors.name ? "border-danger" : ""} />
-                {patientErrors.name ? <p className="mt-2 text-sm text-danger">{patientErrors.name}</p> : null}
-              </Field>
-              <Field label="Date of birth">
-                <Input type="date" value={patientProfile.dateOfBirth} onChange={(event) => setPatientProfile((current) => ({ ...current, dateOfBirth: event.target.value }))} className={patientErrors.dateOfBirth ? "border-danger" : ""} />
-                {patientErrors.dateOfBirth ? <p className="mt-2 text-sm text-danger">{patientErrors.dateOfBirth}</p> : null}
-              </Field>
-            </div>
-            <Field label="Main condition">
-              <Input list="condition-options" value={patientProfile.primaryDiagnosis} onChange={(event) => setPatientProfile((current) => ({ ...current, primaryDiagnosis: event.target.value }))} placeholder="Type to search or add your own" />
-              <datalist id="condition-options">
-                {commonConditions.map((condition) => <option key={condition} value={condition} />)}
-              </datalist>
-            </Field>
-            <Field label="Other conditions">
-              <div className="flex flex-wrap gap-2 rounded-3xl border border-borderColor p-3">
-                {patientProfile.secondaryConditions.map((condition) => (
-                  <button
-                    key={condition}
-                    type="button"
-                    className="rounded-full bg-brandSoft px-3 py-2 text-sm font-semibold text-brandDark"
-                    onClick={() => setPatientProfile((current) => ({ ...current, secondaryConditions: current.secondaryConditions.filter((item) => item !== condition) }))}
-                  >
-                    {condition} x
-                  </button>
-                ))}
-                <input
-                  list="condition-options"
-                  className="min-w-0 flex-1 border-0 p-2 text-base outline-none"
-                  placeholder="Add another condition"
-                  value={conditionDraft}
-                  onChange={(event) => setConditionDraft(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && hasText(conditionDraft)) {
-                      event.preventDefault();
-                      setPatientProfile((current) => ({
-                        ...current,
-                        secondaryConditions: Array.from(new Set([...current.secondaryConditions, trimmedText(conditionDraft)])),
-                      }));
-                      setConditionDraft("");
-                    }
-                  }}
-                />
-              </div>
-            </Field>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Doctor name">
-                <Input value={patientProfile.primaryDoctorName} onChange={(event) => setPatientProfile((current) => ({ ...current, primaryDoctorName: event.target.value }))} />
-              </Field>
-              <Field label="Doctor phone">
-                <Input value={patientProfile.primaryDoctorPhone} placeholder="+1 555-123-4567" onChange={(event) => setPatientProfile((current) => ({ ...current, primaryDoctorPhone: formatPhoneInput(event.target.value) }))} className={patientErrors.primaryDoctorPhone ? "border-danger" : ""} />
-                {patientErrors.primaryDoctorPhone ? <p className="mt-2 text-sm text-danger">{patientErrors.primaryDoctorPhone}</p> : null}
-              </Field>
-              <Field label="Hospital preference">
-                <Input value={patientProfile.hospitalPreference} onChange={(event) => setPatientProfile((current) => ({ ...current, hospitalPreference: event.target.value }))} />
-              </Field>
-              <Field label="Mobility level">
-                <Input value={patientProfile.mobilityLevel} onChange={(event) => setPatientProfile((current) => ({ ...current, mobilityLevel: event.target.value }))} />
-              </Field>
-              <Field label="Insurance provider">
-                <Input value={patientProfile.insuranceProvider} onChange={(event) => setPatientProfile((current) => ({ ...current, insuranceProvider: event.target.value }))} />
-              </Field>
-              <Field label="Insurance ID">
-                <Input value={patientProfile.insuranceId} onChange={(event) => setPatientProfile((current) => ({ ...current, insuranceId: event.target.value }))} />
-              </Field>
-              <Field label="Blood type">
-                <Select value={patientProfile.bloodType} onChange={(event) => setPatientProfile((current) => ({ ...current, bloodType: event.target.value }))}>
-                  <option value="">Choose one</option>
-                  {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map((bloodType) => (
-                    <option key={bloodType} value={bloodType}>{bloodType}</option>
-                  ))}
-                </Select>
-              </Field>
-            </div>
-            <Field label="Allergies">
-              <div className="flex flex-wrap gap-2 rounded-3xl border border-borderColor p-3">
-                {patientProfile.allergies.map((allergy) => (
-                  <button
-                    key={allergy}
-                    type="button"
-                    className="rounded-full bg-red-50 px-3 py-2 text-sm font-semibold text-red-700"
-                    onClick={() => setPatientProfile((current) => ({ ...current, allergies: current.allergies.filter((item) => item !== allergy) }))}
-                  >
-                    {allergy} x
-                  </button>
-                ))}
-                <input
-                  className="min-w-0 flex-1 border-0 p-2 text-base outline-none"
-                  placeholder="Type an allergy and press Enter"
-                  value={allergyDraft}
-                  onChange={(event) => setAllergyDraft(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && hasText(allergyDraft)) {
-                      event.preventDefault();
-                      setPatientProfile((current) => ({
-                        ...current,
-                        allergies: Array.from(new Set([...current.allergies, trimmedText(allergyDraft)])),
-                      }));
-                      setAllergyDraft("");
-                    }
-                  }}
-                />
-              </div>
-            </Field>
-            <div className="flex justify-end">
-              <Button disabled={!patientDirty || patientSaving} onClick={savePatient}>
-                {patientSaving ? "Saving patient..." : "Save Patient"}
-              </Button>
-            </div>
-          </div>
-        </Card>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-2">
-        <Card id="settings-notifications" className="scroll-mt-24">
-          <SectionHeader title="Notifications" description="Turn on the nudges that actually help." />
-          <div className="space-y-4">
-            {[
-              ["Medication reminders", "medicationReminders"],
-              ["24-hour appointment reminders", "appointment24h"],
-              ["1-hour appointment reminders", "appointment1h"],
-              ["Weekly family summary email", "weeklySummary"],
-              ["AI insight alerts", "aiInsightAlerts"],
-              ["Family activity updates", "familyActivityUpdates"],
-            ].map(([label, key]) => (
-              <div key={key} className="flex items-center justify-between rounded-3xl border border-borderColor p-4">
+      <div className="grid gap-6">
+        {activeTab === "profile" && <ProfileEditor />}
+        {activeTab === "patient" && <PatientEditor />}
+        {activeTab === "team" && <AccessManager />}
+
+        {activeTab === "notifications" && (
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Card>
+              <SectionHeader title="Notifications" description="Turn on the nudges that actually help." />
+              <div className="space-y-4">
+                {[
+                  ["Medication reminders", "medicationReminders"],
+                  ["24-hour appointment reminders", "appointment24h"],
+                  ["1-hour appointment reminders", "appointment1h"],
+                  ["Weekly family summary email", "weeklySummary"],
+                  ["AI insight alerts", "aiInsightAlerts"],
+                  ["Family activity updates", "familyActivityUpdates"],
+                ].map(([label, key]) => (
+                  <div key={key} className="flex items-center justify-between rounded-3xl border border-borderColor p-4">
+                    <div>
+                      <p className="font-semibold text-textPrimary">{label}</p>
+                      <p className="text-sm text-textSecondary">{savedToggleKey === key ? "Saved" : "You can change this any time."}</p>
+                    </div>
+                    <Toggle
+                      checked={Boolean(bootstrap.viewer.notificationPreferences[key as keyof typeof bootstrap.viewer.notificationPreferences])}
+                      onChange={(value) => void updateNotification(key, value)}
+                      aria-label={label}
+                    />
+                  </div>
+                ))}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label="Reminder time">
+                    <Input type="time" value={bootstrap.viewer.notificationPreferences.medicationReminderTime} onChange={(event) => void updateNotification("medicationReminderTime", event.target.value)} />
+                  </Field>
+                  <Field label="Weekly summary day">
+                    <Select value={bootstrap.viewer.notificationPreferences.weeklySummaryDay} onChange={(event) => void updateNotification("weeklySummaryDay", event.target.value)}>
+                      {["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((day) => (
+                        <option key={day} value={day}>{day}</option>
+                      ))}
+                    </Select>
+                  </Field>
+                </div>
+              </div>
+            </Card>
+
+            <Card>
+              <SectionHeader title="Display settings" description="Make the whole app easier to read at a glance." />
+              <div className="grid gap-5">
                 <div>
-                  <p className="font-semibold text-textPrimary">{label}</p>
-                  <p className="text-sm text-textSecondary">{savedToggleKey === key ? "Saved" : "You can change this any time."}</p>
+                  <p className="field-label">Font size</p>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    {[
+                      ["normal", "Normal"],
+                      ["large", "Large"],
+                      ["extra_large", "Extra Large"],
+                    ].map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        className={`rounded-3xl border p-4 text-left ${currentSettings.display.fontSize === value ? "border-brand bg-brandSoft" : "border-borderColor bg-white hover:bg-slate-50"}`}
+                        onClick={() => void updateDisplay({ fontSize: value })}
+                      >
+                        <p className="font-semibold text-textPrimary">{label}</p>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <Toggle
-                  checked={Boolean(bootstrap.viewer.notificationPreferences[key as keyof typeof bootstrap.viewer.notificationPreferences])}
-                  onChange={(value) => void updateNotification(key, value)}
-                  aria-label={label}
-                />
+                <div>
+                  <p className="field-label">Color theme</p>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    {[
+                      ["teal", "#0D9488"],
+                      ["blue", "#2563EB"],
+                      ["purple", "#7C3AED"],
+                    ].map(([value, color]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        className={`rounded-3xl border p-4 text-left ${currentSettings.display.colorTheme === value ? "border-brand bg-brandSoft" : "border-borderColor bg-white hover:bg-slate-50"}`}
+                        onClick={() => void updateDisplay({ colorTheme: value })}
+                      >
+                        <span className="mb-3 block h-8 w-full rounded-2xl" style={{ backgroundColor: color }} />
+                        <p className="font-semibold capitalize text-textPrimary">{value}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between rounded-3xl border border-borderColor p-4">
+                  <div>
+                    <p className="font-semibold text-textPrimary">High contrast mode</p>
+                    <p className="text-sm text-textSecondary">Boost visual clarity across the whole app.</p>
+                  </div>
+                  <Toggle checked={currentSettings.display.highContrast} onChange={(value) => void updateDisplay({ highContrast: value })} aria-label="High contrast mode" />
+                </div>
               </div>
-            ))}
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Reminder time">
-                <Input type="time" value={bootstrap.viewer.notificationPreferences.medicationReminderTime} onChange={(event) => void updateNotification("medicationReminderTime", event.target.value)} />
-              </Field>
-              <Field label="Weekly summary day">
-                <Select value={bootstrap.viewer.notificationPreferences.weeklySummaryDay} onChange={(event) => void updateNotification("weeklySummaryDay", event.target.value)}>
-                  {["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((day) => (
-                    <option key={day} value={day}>{day}</option>
-                  ))}
-                </Select>
-              </Field>
-            </div>
+            </Card>
           </div>
-        </Card>
+        )}
 
-        <Card id="settings-display" className="scroll-mt-24">
-          <SectionHeader title="Display settings" description="Make the whole app easier to read at a glance." />
-          <div className="grid gap-5">
-            <div>
-              <p className="field-label">Font size</p>
-              <div className="grid gap-3 sm:grid-cols-3">
-                {[
-                  ["normal", "Normal"],
-                  ["large", "Large"],
-                  ["extra_large", "Extra Large"],
-                ].map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    className={`rounded-3xl border p-4 text-left ${currentSettings.display.fontSize === value ? "border-brand bg-brandSoft" : "border-borderColor bg-white"}`}
-                    onClick={() => void updateDisplay({ fontSize: value })}
+        {activeTab === "security" && (
+          <Card>
+            <SectionHeader
+              title="Data and privacy"
+              description={
+                canExport || canViewAuditLog
+                  ? "Export what you need and keep control of your information."
+                  : "Personal account controls live here. Patient exports and security logs stay with the primary caregiver."
+              }
+            />
+            <div className="grid gap-4 lg:grid-cols-3">
+              {canExport ? (
+                <>
+                  <Button
+                    title="Download a CSV export of the patient workspace."
+                    onClick={() => window.open(`${apiBase}/settings/export/csv`, "_blank", "noopener,noreferrer")}
                   >
-                    <p className="font-semibold text-textPrimary">{label}</p>
-                  </button>
+                    <Download className="h-4 w-4" />
+                    Export My Data
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    title="Download a ZIP of patient documents."
+                    onClick={() => window.open(`${apiBase}/settings/export/documents.zip`, "_blank", "noopener,noreferrer")}
+                  >
+                    <Download className="h-4 w-4" />
+                    Download All Documents
+                  </Button>
+                </>
+              ) : (
+                <div className="rounded-3xl border border-dashed border-borderColor p-4 text-sm text-textSecondary lg:col-span-2">
+                  This role can manage its own account settings, but patient export tools are only visible to the primary caregiver.
+                </div>
+              )}
+              <Button variant="danger" onClick={() => setDeleteOpen(true)}>
+                <Trash2 className="h-4 w-4" />
+                Delete Account
+              </Button>
+            </div>
+            {canViewAuditLog ? (
+              <div className="mt-6 rounded-3xl border border-borderColor bg-slate-50 p-4">
+                <p className="text-base font-semibold text-textPrimary">Recent security activity</p>
+                <div className="mt-3 space-y-3">
+                  {securityAuditLogs.length === 0 ? (
+                    <p className="text-sm text-textSecondary italic">No recent activity found.</p>
+                  ) : (
+                    securityAuditLogs.map((entry) => (
+                      <div key={entry.id} className="flex items-start justify-between gap-3 rounded-2xl bg-white p-3 shadow-sm">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-textPrimary">{entry.action.replaceAll("_", " ")}</p>
+                          <p className="text-sm text-textSecondary">{entry.detail}</p>
+                        </div>
+                        <p className="shrink-0 text-xs text-textSecondary">{formatDate(entry.createdAt)}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            ) : null}
+          </Card>
+        )}
+
+        {activeTab === "support" && (
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Card>
+              <SectionHeader title="Help and support" description="Answers and quick guides without the tech jargon." action={<Button variant="ghost" onClick={() => setFeedbackOpen(true)}>Send Feedback</Button>} />
+              <div className="space-y-3">
+                {faqs.map(([question, answer]) => (
+                  <details key={question} className="rounded-3xl border border-borderColor p-4 bg-white/50 hover:bg-white transition-colors">
+                    <summary className="cursor-pointer text-base font-semibold text-textPrimary">{question}</summary>
+                    <p className="mt-3 text-base text-textSecondary leading-relaxed">{answer}</p>
+                  </details>
                 ))}
               </div>
-            </div>
-            <div>
-              <p className="field-label">Color theme</p>
-              <div className="grid gap-3 sm:grid-cols-3">
-                {[
-                  ["teal", "#0D9488"],
-                  ["blue", "#2563EB"],
-                  ["purple", "#7C3AED"],
-                ].map(([value, color]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    className={`rounded-3xl border p-4 text-left ${currentSettings.display.colorTheme === value ? "border-brand bg-brandSoft" : "border-borderColor bg-white"}`}
-                    onClick={() => void updateDisplay({ colorTheme: value })}
-                  >
-                    <span className="mb-3 block h-8 w-full rounded-2xl" style={{ backgroundColor: color }} />
-                    <p className="font-semibold capitalize text-textPrimary">{value}</p>
-                  </button>
+            </Card>
+
+            <Card>
+              <SectionHeader title="Video guides" description="Short walkthroughs for the moments you need extra confidence." />
+              <div className="grid gap-4 sm:grid-cols-2">
+                {videoGuides.map((guide) => (
+                  <div key={guide.title} className="rounded-3xl border border-borderColor p-4 bg-white/50">
+                    <div className="flex h-32 items-center justify-center rounded-2xl bg-gradient-to-br from-brand to-brandDark text-white shadow-md">
+                      <PlayCircle className="h-10 w-10 opacity-90 transition-opacity hover:opacity-100 cursor-pointer" onClick={() => setVideoOpen(guide.url)} />
+                    </div>
+                    <p className="mt-4 text-base font-bold text-textPrimary line-clamp-1">{guide.title}</p>
+                    <p className="mt-1 text-sm text-textSecondary line-clamp-2">{guide.description}</p>
+                    <Button variant="secondary" className="mt-4 w-full" onClick={() => setVideoOpen(guide.url)}>
+                      Watch Guide
+                    </Button>
+                  </div>
                 ))}
               </div>
-            </div>
-            <div className="flex items-center justify-between rounded-3xl border border-borderColor p-4">
-              <div>
-                <p className="font-semibold text-textPrimary">High contrast mode</p>
-                <p className="text-sm text-textSecondary">Boost visual clarity across the whole app.</p>
-              </div>
-              <Toggle checked={currentSettings.display.highContrast} onChange={(value) => void updateDisplay({ highContrast: value })} aria-label="High contrast mode" />
-            </div>
+            </Card>
           </div>
-        </Card>
+        )}
       </div>
-
-      <div className="grid gap-6 xl:grid-cols-2">
-        <Card id="settings-support" className="scroll-mt-24">
-          <SectionHeader title="Help and support" description="Answers and quick guides without the tech jargon." action={<Button variant="ghost" onClick={() => setFeedbackOpen(true)}>Send Feedback</Button>} />
-          <div className="space-y-3">
-            {faqs.map(([question, answer]) => (
-              <details key={question} className="rounded-3xl border border-borderColor p-4">
-                <summary className="cursor-pointer text-base font-semibold text-textPrimary">{question}</summary>
-                <p className="mt-3 text-base text-textSecondary">{answer}</p>
-              </details>
-            ))}
-          </div>
-        </Card>
-
-        <Card>
-          <SectionHeader title="Video guides" description="Short walkthroughs for the moments you need extra confidence." />
-          <div className="grid gap-4 sm:grid-cols-2">
-            {videoGuides.map((guide) => (
-              <div key={guide.title} className="rounded-3xl border border-borderColor p-4">
-                <div className="flex h-32 items-center justify-center rounded-3xl bg-gradient-to-br from-brand to-brandDark text-white">
-                  <PlayCircle className="h-10 w-10" />
-                </div>
-                <p className="mt-4 text-lg font-bold text-textPrimary">{guide.title}</p>
-                <p className="mt-1 text-sm text-textSecondary">{guide.description}</p>
-                <Button variant="secondary" className="mt-4 w-full" onClick={() => setVideoOpen(guide.url)}>
-                  Watch Guide
-                </Button>
-              </div>
-            ))}
-          </div>
-        </Card>
-      </div>
-
-        <Card id="settings-privacy" className="scroll-mt-24">
-          <SectionHeader title="Data and privacy" description="Export what you need and keep control of your information." />
-          <div className="grid gap-4 lg:grid-cols-3">
-          <Button
-            disabled={!canExport}
-            title={canExport ? "Download a CSV export of the patient workspace." : "This account does not have export permission."}
-            onClick={() => canExport && window.open(`${apiBase}/settings/export/csv`, "_blank", "noopener,noreferrer")}
-          >
-            <Download className="h-4 w-4" />
-            Export My Data
-          </Button>
-          <Button
-            variant="secondary"
-            disabled={!canExport}
-            title={canExport ? "Download a ZIP of patient documents." : "This account does not have export permission."}
-            onClick={() => canExport && window.open(`${apiBase}/settings/export/documents.zip`, "_blank", "noopener,noreferrer")}
-          >
-            <Download className="h-4 w-4" />
-            Download All Documents
-          </Button>
-          <Button variant="danger" onClick={() => setDeleteOpen(true)}>
-            <Trash2 className="h-4 w-4" />
-            Delete Account
-          </Button>
-        </div>
-        <div className="mt-6 rounded-3xl border border-borderColor bg-slate-50 p-4">
-          <p className="text-base font-semibold text-textPrimary">Recent security activity</p>
-          <div className="mt-3 space-y-3">
-            {securityAuditLogs.map((entry) => (
-              <div key={entry.id} className="flex items-start justify-between gap-3 rounded-2xl bg-white p-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-textPrimary">{entry.action.replaceAll("_", " ")}</p>
-                  <p className="text-sm text-textSecondary">{entry.detail}</p>
-                </div>
-                <p className="shrink-0 text-xs text-textSecondary">{formatDate(entry.createdAt)}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </Card>
 
       <Modal open={Boolean(videoOpen)} title="Guide preview" onClose={() => setVideoOpen(null)}>
         {videoOpen ? (
@@ -684,7 +378,7 @@ export const SettingsPage = () => {
             <div className="aspect-video overflow-hidden rounded-3xl border border-borderColor">
               <iframe title="CareCircle guide placeholder" src={videoOpen} className="h-full w-full" allowFullScreen />
             </div>
-            <a href={videoOpen} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-base font-semibold text-brandDark">
+            <a href={videoOpen} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-base font-semibold text-brandDark hover:underline">
               Open in a new tab
               <ExternalLink className="h-4 w-4" />
             </a>
@@ -703,11 +397,11 @@ export const SettingsPage = () => {
             </Select>
           </Field>
           <Field label="Message">
-            <Textarea value={feedbackForm.message} onChange={(event) => setFeedbackForm((current) => ({ ...current, message: event.target.value }))} />
+            <Textarea value={feedbackForm.message} onChange={(event) => setFeedbackForm((current) => ({ ...current, message: event.target.value }))} placeholder="Please describe what happened..." />
             <p className="mt-2 text-sm text-textSecondary">{feedbackForm.message.length} / 100 characters minimum</p>
           </Field>
           <Field label="Reply email (optional)">
-            <Input type="email" value={feedbackForm.replyEmail} onChange={(event) => setFeedbackForm((current) => ({ ...current, replyEmail: event.target.value }))} />
+            <Input type="email" value={feedbackForm.replyEmail} onChange={(event) => setFeedbackForm((current) => ({ ...current, replyEmail: event.target.value }))} placeholder="you@example.com" />
           </Field>
           <Button disabled={feedbackSaving || trimmedText(feedbackForm.message).length < 100} onClick={submitFeedback}>
             <Send className="h-4 w-4" />
@@ -718,11 +412,22 @@ export const SettingsPage = () => {
 
       <Modal open={deleteOpen} title="Delete account" onClose={() => setDeleteOpen(false)}>
         <div className="grid gap-4">
-          <p className="text-base text-textSecondary">Type DELETE to confirm. This signs you out and removes this session's account data.</p>
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
+            <div className="flex gap-3">
+              <ShieldAlert className="h-5 w-5 shrink-0 text-red-600" />
+              <div>
+                <p className="text-sm font-semibold text-red-900">This action cannot be undone</p>
+                <p className="mt-1 text-sm text-red-800">
+                  This signs you out and removes this session's account data. You will lose access to the patient record immediately.
+                </p>
+              </div>
+            </div>
+          </div>
+          <p className="text-base font-semibold text-textPrimary">Type DELETE to confirm.</p>
           <Input value={deleteText} onChange={(event) => setDeleteText(event.target.value)} placeholder="DELETE" />
-          <div className="flex justify-end gap-3">
+          <div className="flex justify-end gap-3 mt-2">
             <Button variant="ghost" onClick={() => setDeleteOpen(false)}>Cancel</Button>
-            <Button variant="danger" disabled={deleteText !== "DELETE"} onClick={deleteAccount}>Delete account</Button>
+            <Button variant="danger" disabled={deleteText !== "DELETE"} onClick={deleteAccount}>Delete Account</Button>
           </div>
         </div>
       </Modal>

@@ -269,6 +269,8 @@ export const buildDemoSnapshot = (): AppSnapshot => {
       aiActionItems: ["Discuss A1C trend at next appointment.", "Continue morning glucose log."],
       isProcessed: true,
       extractedText: "A1C 7.4, eGFR stable, Vitamin D mildly low",
+      processingStatus: "ready",
+      isLowConfidence: false,
     },
     {
       id: uid("document", 2),
@@ -292,6 +294,8 @@ export const buildDemoSnapshot = (): AppSnapshot => {
       aiActionItems: ["Check billing balance before due date."],
       isProcessed: true,
       extractedText: "Explanation of Benefits, emergency department, patient responsibility",
+      processingStatus: "ready",
+      isLowConfidence: false,
     },
     {
       id: uid("document", 3),
@@ -318,6 +322,8 @@ export const buildDemoSnapshot = (): AppSnapshot => {
       aiActionItems: ["Review dizziness plan with doctor."],
       isProcessed: true,
       extractedText: "Discharge summary after dizziness episode",
+      processingStatus: "ready",
+      isLowConfidence: false,
     },
   ];
 
