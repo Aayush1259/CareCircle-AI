@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowRight, HeartHandshake, LockKeyhole, Mail, Stethoscope, Users } from "lucide-react";
+import { ArrowRight, Chrome, HeartHandshake, LockKeyhole, Mail, Stethoscope, Users } from "lucide-react";
 import toast from "react-hot-toast";
 import type { UserRole } from "@carecircle/shared";
 import { Button, Card, Field, Input } from "@/components/ui";
 import { useAppData } from "@/context/AppDataContext";
 import { roleDescription, roleHomePath, roleLabel } from "@/lib/roles";
+import { hasBrowserSupabaseAuth } from "@/lib/supabaseBrowser";
 
 const roleOptions: Array<{
   role: Exclude<UserRole, "admin">;
@@ -36,7 +37,7 @@ const roleOptions: Array<{
 export const SignupPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { signup, loading } = useAppData();
+  const { signup, loading, startGoogleAuth } = useAppData();
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -86,6 +87,25 @@ export const SignupPage = () => {
       navigate(roleHomePath(session.viewer.role), { replace: true });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Please try again.");
+    }
+  };
+
+  const handleGoogleSignup = async () => {
+    if (form.role === "doctor" && !form.licenseNumber.trim()) {
+      setErrors((current) => ({ ...current, licenseNumber: "Please add your license number." }));
+      return;
+    }
+
+    try {
+      await startGoogleAuth({
+        mode: "signup",
+        role: form.role,
+        name: form.name.trim() || undefined,
+        licenseNumber: form.role === "doctor" ? form.licenseNumber.trim() : undefined,
+        inviteToken: inviteToken ?? undefined,
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Google sign-up is not ready right now.");
     }
   };
 
@@ -217,6 +237,20 @@ export const SignupPage = () => {
                 <ArrowRight className="h-4 w-4" />
               </Button>
             </form>
+
+            {hasBrowserSupabaseAuth ? (
+              <>
+                <div className="my-5 flex items-center gap-3 text-sm text-textSecondary">
+                  <div className="h-px flex-1 bg-borderColor" />
+                  <span>or</span>
+                  <div className="h-px flex-1 bg-borderColor" />
+                </div>
+                <Button variant="ghost" className="w-full" disabled={loading} onClick={() => void handleGoogleSignup()}>
+                  <Chrome className="h-4 w-4" />
+                  Continue with Google as {selectedRole.title}
+                </Button>
+              </>
+            ) : null}
 
             <div className="mt-6 rounded-3xl bg-brandSoft/55 p-4">
               <p className="text-sm font-semibold text-textPrimary">Already have an account?</p>

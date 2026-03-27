@@ -14,6 +14,7 @@ import { buildPatientAccessRecord } from "@carecircle/shared";
 import { env, featureFlags } from "../env";
 import { getPatient, getState, getViewer, getViewerById, nextId, setActiveUser } from "../store";
 import { emailService } from "./email";
+import { persistenceService } from "./persistence";
 import { supabaseAdmin, supabasePublic } from "./supabase";
 
 const sessionDurationMs = 1000 * 60 * 60 * 24 * 7;
@@ -40,6 +41,13 @@ interface PasswordResetRequest {
 interface PasswordResetTokenRecord {
   email: string;
   expiresAt: number;
+}
+
+interface OAuthExchangeInput {
+  accessToken: string;
+  role?: UserRole;
+  licenseNumber?: string;
+  name?: string;
 }
 
 const localPasswords = new Map<string, string>();
@@ -240,6 +248,17 @@ const createViewer = (input: {
   return viewer;
 };
 
+const ensureViewerInState = (viewer: UserRecord) => {
+  const existing = getState().users.find((user) => user.id === viewer.id);
+  if (existing) {
+    Object.assign(existing, viewer);
+    return existing;
+  }
+
+  getState().users.unshift(viewer);
+  return viewer;
+};
+
 const getPasswordResetLink = (token: string) =>
   `${env.frontendUrl.replace(/\/+$/, "")}/reset-password?token=${encodeURIComponent(token)}`;
 
@@ -270,15 +289,17 @@ export const authService = {
           role?: string;
           license_number?: string;
         };
+        const persistedViewer = await persistenceService.loadUserByAuthIdentity(data.user.id, normalizedEmail);
         const viewer =
           getState().users.find((user) => user.authUserId === data.user.id || user.email.toLowerCase() === normalizedEmail) ??
+          (persistedViewer ? ensureViewerInState(persistedViewer) :
           createViewer({
             authUserId: data.user.id,
             email: normalizedEmail,
             name: metadata.full_name || normalizedEmail.split("@")[0],
             role: normalizeRole(metadata.role),
             licenseNumber: metadata.license_number,
-          });
+          }));
 
         viewer.authUserId = data.user.id;
         viewer.lastLogin = new Date().toISOString();
@@ -286,6 +307,7 @@ export const authService = {
         if (metadata.full_name) viewer.name = metadata.full_name;
         if (metadata.license_number) viewer.licenseNumber = metadata.license_number;
         setLocalPassword(normalizedEmail, password);
+        await persistenceService.persistUser(viewer);
         return buildSession(viewer, "supabase");
       }
     }
@@ -297,6 +319,7 @@ export const authService = {
     }
 
     viewer.lastLogin = new Date().toISOString();
+    await persistenceService.persistUser(viewer);
     return buildSession(viewer, "demo");
   },
 
@@ -330,7 +353,14 @@ export const authService = {
         },
       });
 
-      if (!error && data.user) {
+      if (error) {
+        if (/already/i.test(error.message)) {
+          throw new Error("An account with this email already exists.");
+        }
+        throw new Error(error.message);
+      }
+
+      if (data.user) {
         authUserId = data.user.id;
         mode = "supabase";
       }
@@ -345,8 +375,69 @@ export const authService = {
     });
     viewer.lastLogin = new Date().toISOString();
     setLocalPassword(email, password);
+    await persistenceService.persistUser(viewer);
 
     return buildSession(viewer, mode);
+  },
+
+  async exchangeOAuthAccessToken(input: OAuthExchangeInput) {
+    if (!featureFlags.supabaseEnabled || !supabaseAdmin) {
+      throw new Error("Google sign-in is not available until Supabase is configured.");
+    }
+
+    const accessToken = input.accessToken.trim();
+    if (!accessToken) {
+      throw new Error("Google sign-in did not return an access token.");
+    }
+
+    const { data, error } = await supabaseAdmin.auth.getUser(accessToken);
+    if (error || !data.user) {
+      throw new Error("CareCircle could not verify that Google sign-in. Please try again.");
+    }
+
+    const normalizedEmail = normalizeEmail(data.user.email ?? "");
+    if (!normalizedEmail) {
+      throw new Error("Google did not return a usable email address.");
+    }
+
+    const metadata = (data.user.user_metadata ?? {}) as {
+      full_name?: string;
+      name?: string;
+      role?: string;
+      license_number?: string;
+    };
+
+    const persistedViewer = await persistenceService.loadUserByAuthIdentity(data.user.id, normalizedEmail);
+    const inMemoryViewer = getState().users.find(
+      (user) => user.authUserId === data.user.id || user.email.toLowerCase() === normalizedEmail,
+    );
+
+    if (!inMemoryViewer && !persistedViewer && !input.role) {
+      throw new Error("This Google account is new to CareCircle. Start from Create account so we can choose the right role.");
+    }
+
+    const viewer =
+      inMemoryViewer ??
+      (persistedViewer ? ensureViewerInState(persistedViewer) :
+      createViewer({
+        authUserId: data.user.id,
+        email: normalizedEmail,
+        name: input.name?.trim() || metadata.full_name || metadata.name || normalizedEmail.split("@")[0],
+        role: normalizeRole(input.role ?? metadata.role),
+        licenseNumber: input.licenseNumber?.trim() || metadata.license_number,
+      }));
+
+    viewer.authUserId = data.user.id;
+    viewer.lastLogin = new Date().toISOString();
+    viewer.name = input.name?.trim() || metadata.full_name || metadata.name || viewer.name;
+    viewer.role = persistedViewer?.role ?? viewer.role ?? normalizeRole(input.role ?? metadata.role);
+    if (!persistedViewer?.role && input.role) {
+      viewer.role = normalizeRole(input.role);
+    }
+    viewer.licenseNumber = input.licenseNumber?.trim() || viewer.licenseNumber || metadata.license_number;
+
+    await persistenceService.persistUser(viewer);
+    return buildSession(viewer, "supabase");
   },
 
   async requestPasswordReset({ email }: PasswordResetRequest) {

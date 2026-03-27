@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, useCal
 import toast from "react-hot-toast";
 import type { AuthSession, BootstrapPayload } from "@carecircle/shared";
 import { apiRequest, authStorageKey } from "@/lib/api";
+import { browserSupabase, googleAuthContextStorageKey, type GoogleAuthContext } from "@/lib/supabaseBrowser";
 
 interface AppDataContextValue {
   session: AuthSession | null;
@@ -18,6 +19,8 @@ interface AppDataContextValue {
     role: "caregiver" | "family_member" | "doctor";
     licenseNumber?: string;
   }) => Promise<AuthSession>;
+  startGoogleAuth: (context: GoogleAuthContext) => Promise<void>;
+  completeGoogleAuth: () => Promise<{ session: AuthSession; inviteToken?: string }>;
   requestPasswordReset: (email: string) => Promise<{ message: string }>;
   confirmPasswordReset: (token: string, password: string) => Promise<{ message: string }>;
   logout: () => Promise<void>;
@@ -94,6 +97,15 @@ export const AppDataProvider = ({ children }: { children: React.ReactNode }) => 
     await loadAppState();
   }, [loadAppState]);
 
+  const finalizeAuthenticatedSession = useCallback(async (nextSession: AuthSession) => {
+    window.localStorage.setItem(authStorageKey, nextSession.token);
+    setSession(nextSession);
+    const bootstrapPayload = await apiRequest<BootstrapPayload>("/bootstrap");
+    latestBootstrapRef.current = bootstrapPayload;
+    setBootstrap(bootstrapPayload);
+    setError(null);
+  }, []);
+
   const login = useCallback(async (email: string, password: string) => {
     setLoading(true);
     try {
@@ -101,11 +113,7 @@ export const AppDataProvider = ({ children }: { children: React.ReactNode }) => 
         method: "POST",
         body: JSON.stringify({ email, password }),
       });
-      window.localStorage.setItem(authStorageKey, payload.session.token);
-      setSession(payload.session);
-      const bootstrapPayload = await apiRequest<BootstrapPayload>("/bootstrap");
-      setBootstrap(bootstrapPayload);
-      setError(null);
+      await finalizeAuthenticatedSession(payload.session);
       return payload.session;
     } catch (nextError) {
       window.localStorage.removeItem(authStorageKey);
@@ -116,7 +124,7 @@ export const AppDataProvider = ({ children }: { children: React.ReactNode }) => 
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [finalizeAuthenticatedSession]);
 
   const signup = useCallback(async (input: {
     name: string;
@@ -131,11 +139,7 @@ export const AppDataProvider = ({ children }: { children: React.ReactNode }) => 
         method: "POST",
         body: JSON.stringify(input),
       });
-      window.localStorage.setItem(authStorageKey, payload.session.token);
-      setSession(payload.session);
-      const bootstrapPayload = await apiRequest<BootstrapPayload>("/bootstrap");
-      setBootstrap(bootstrapPayload);
-      setError(null);
+      await finalizeAuthenticatedSession(payload.session);
       return payload.session;
     } catch (nextError) {
       window.localStorage.removeItem(authStorageKey);
@@ -146,7 +150,91 @@ export const AppDataProvider = ({ children }: { children: React.ReactNode }) => 
     } finally {
       setLoading(false);
     }
+  }, [finalizeAuthenticatedSession]);
+
+  const startGoogleAuth = useCallback(async (context: GoogleAuthContext) => {
+    if (!browserSupabase) {
+      throw new Error("Google sign-in is not available until Supabase browser auth is configured.");
+    }
+
+    window.sessionStorage.setItem(googleAuthContextStorageKey, JSON.stringify(context));
+    const redirectUrl = new URL("/auth/callback", window.location.origin);
+    if (context.inviteToken) {
+      redirectUrl.searchParams.set("inviteToken", context.inviteToken);
+    }
+
+    const { error: authError } = await browserSupabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: redirectUrl.toString(),
+        queryParams: {
+          prompt: "select_account",
+        },
+      },
+    });
+
+    if (authError) {
+      window.sessionStorage.removeItem(googleAuthContextStorageKey);
+      throw new Error(authError.message);
+    }
   }, []);
+
+  const completeGoogleAuth = useCallback(async () => {
+    if (!browserSupabase) {
+      throw new Error("Google sign-in is not available until Supabase browser auth is configured.");
+    }
+
+    setLoading(true);
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const code = searchParams.get("code");
+      const providerError = searchParams.get("error_description") || searchParams.get("error");
+      if (providerError) {
+        throw new Error(decodeURIComponent(providerError));
+      }
+
+      const storedContext = window.sessionStorage.getItem(googleAuthContextStorageKey);
+      const authContext = storedContext ? (JSON.parse(storedContext) as GoogleAuthContext) : undefined;
+
+      if (code) {
+        const { error: exchangeError } = await browserSupabase.auth.exchangeCodeForSession(code);
+        if (exchangeError) {
+          throw new Error(exchangeError.message);
+        }
+      }
+
+      const { data, error: sessionError } = await browserSupabase.auth.getSession();
+      if (sessionError) {
+        throw new Error(sessionError.message);
+      }
+      if (!data.session?.access_token) {
+        throw new Error("Google sign-in finished without a usable Supabase session.");
+      }
+
+      const payload = await apiRequest<{ session: AuthSession }>("/auth/oauth/exchange", {
+        method: "POST",
+        body: JSON.stringify({
+          accessToken: data.session.access_token,
+          role: authContext?.role,
+          licenseNumber: authContext?.licenseNumber,
+          name: authContext?.name,
+        }),
+      });
+
+      await finalizeAuthenticatedSession(payload.session);
+      window.sessionStorage.removeItem(googleAuthContextStorageKey);
+      return { session: payload.session, inviteToken: authContext?.inviteToken };
+    } catch (nextError) {
+      window.localStorage.removeItem(authStorageKey);
+      setSession(null);
+      setBootstrap(null);
+      latestBootstrapRef.current = null;
+      setError(nextError instanceof Error ? nextError.message : "Google sign-in could not be completed.");
+      throw nextError;
+    } finally {
+      setLoading(false);
+    }
+  }, [finalizeAuthenticatedSession]);
 
   const requestPasswordReset = useCallback(async (email: string) => {
     return apiRequest<{ message: string }>("/auth/password-reset/request", {
@@ -168,9 +256,14 @@ export const AppDataProvider = ({ children }: { children: React.ReactNode }) => 
     } catch {
       // Ignore logout network errors and clear the local session anyway.
     } finally {
+      if (browserSupabase) {
+        void browserSupabase.auth.signOut();
+      }
+      window.sessionStorage.removeItem(googleAuthContextStorageKey);
       window.localStorage.removeItem(authStorageKey);
       setSession(null);
       setBootstrap(null);
+      latestBootstrapRef.current = null;
       setError(null);
     }
   }, []);
@@ -205,11 +298,26 @@ export const AppDataProvider = ({ children }: { children: React.ReactNode }) => 
       request: apiRequest,
       login,
       signup,
+      startGoogleAuth,
+      completeGoogleAuth,
       requestPasswordReset,
       confirmPasswordReset,
       logout,
     }),
-    [session, bootstrap, loading, error, refresh, login, signup, requestPasswordReset, confirmPasswordReset, logout],
+    [
+      session,
+      bootstrap,
+      loading,
+      error,
+      refresh,
+      login,
+      signup,
+      startGoogleAuth,
+      completeGoogleAuth,
+      requestPasswordReset,
+      confirmPasswordReset,
+      logout,
+    ],
   );
 
   return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>;

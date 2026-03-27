@@ -1,15 +1,16 @@
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { HeartHandshake, LockKeyhole, Mail } from "lucide-react";
+import { Chrome, HeartHandshake, LockKeyhole, Mail } from "lucide-react";
 import toast from "react-hot-toast";
 import { Button, Card, Field, Input } from "@/components/ui";
 import { useAppData } from "@/context/AppDataContext";
 import { roleHomePath } from "@/lib/roles";
+import { hasBrowserSupabaseAuth } from "@/lib/supabaseBrowser";
 
 export const LoginPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { login, loading } = useAppData();
+  const { login, loading, startGoogleAuth } = useAppData();
   const [email, setEmail] = useState("demo@carecircle.ai");
   const [password, setPassword] = useState("Demo1234");
   const inviteToken = searchParams.get("inviteToken");
@@ -26,6 +27,14 @@ export const LoginPage = () => {
       navigate(roleHomePath(session.viewer.role), { replace: true });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Please try again.");
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    try {
+      await startGoogleAuth({ mode: "login", inviteToken: inviteToken ?? undefined });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Google sign-in is not ready right now.");
     }
   };
 
@@ -92,6 +101,20 @@ export const LoginPage = () => {
                 {loading ? "Opening CareCircle..." : "Open CareCircle"}
               </Button>
             </form>
+
+            {hasBrowserSupabaseAuth ? (
+              <>
+                <div className="my-5 flex items-center gap-3 text-sm text-textSecondary">
+                  <div className="h-px flex-1 bg-borderColor" />
+                  <span>or</span>
+                  <div className="h-px flex-1 bg-borderColor" />
+                </div>
+                <Button variant="ghost" className="w-full" disabled={loading} onClick={() => void handleGoogleSignIn()}>
+                  <Chrome className="h-4 w-4" />
+                  Continue with Google
+                </Button>
+              </>
+            ) : null}
 
             <div className="mt-6 rounded-3xl bg-brandSoft/55 p-4">
               <p className="text-sm font-semibold text-textPrimary">Demo login</p>

@@ -37,6 +37,7 @@ import { authService } from "./services/auth";
 import { documentService } from "./services/documents";
 import { emailService } from "./services/email";
 import { exportService } from "./services/export";
+import { persistenceService } from "./services/persistence";
 import { registerCronJobs } from "./services/cron";
 import { supabaseAdmin } from "./services/supabase";
 
@@ -45,13 +46,14 @@ const asyncHandler =
   (request, response, next) =>
     Promise.resolve(handler(request, response, next)).catch(next);
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
 let cronRegistered = false;
 const publicApiPaths = new Set([
   "/api/health",
   "/api/auth/signup",
   "/api/auth/login",
+  "/api/auth/oauth/exchange",
   "/api/auth/session",
   "/api/auth/password-reset/request",
   "/api/auth/password-reset/confirm",
@@ -357,6 +359,35 @@ export const createServer = () => {
   );
 
   app.post(
+    "/api/auth/oauth/exchange",
+    asyncHandler(async (request, response) => {
+      const accessToken = trimmedText(request.body?.accessToken);
+      const role = trimmedText(request.body?.role);
+      const name = trimmedText(request.body?.name);
+      const licenseNumber = optionalText(request.body?.licenseNumber) || undefined;
+
+      if (!hasText(accessToken)) {
+        sendValidationError(response, "Google sign-in did not include an access token.");
+        return;
+      }
+
+      const session = await authService.exchangeOAuthAccessToken({
+        accessToken,
+        role: role === "family_member" || role === "doctor" || role === "admin" ? role : role === "caregiver" ? "caregiver" : undefined,
+        name: name || undefined,
+        licenseNumber,
+      });
+
+      recordAudit({
+        action: "auth_login",
+        resourceType: "session",
+        detail: `Signed in with Google as ${session.viewer.email}.`,
+      });
+      response.status(201).json({ session });
+    }),
+  );
+
+  app.post(
     "/api/auth/password-reset/request",
     asyncHandler(async (request, response) => {
       const email = trimmedText(request.body?.email);
@@ -421,9 +452,10 @@ export const createServer = () => {
     next();
   });
 
-  app.get("/api/bootstrap", (_request, response) => {
+  app.get("/api/bootstrap", asyncHandler(async (_request, response) => {
+    await persistenceService.hydrateDocumentsForPatient(getPatient().id);
     response.json(getBootstrapPayload());
-  });
+  }));
 
   app.get("/api/meta", (_request, response) => {
     response.json({
@@ -754,10 +786,11 @@ export const createServer = () => {
     response.json({ analysis });
   }));
 
-  app.get("/api/documents", (_request, response) => {
+  app.get("/api/documents", asyncHandler(async (_request, response) => {
     if (!requireCapability(response, "view_documents", "You do not have access to patient documents.")) return;
+    await persistenceService.hydrateDocumentsForPatient(getPatient().id);
     response.json({ documents: state.documents });
-  });
+  }));
 
   app.post(
     "/api/documents/upload",
@@ -793,6 +826,7 @@ export const createServer = () => {
         extractedText,
       };
       state.documents.unshift(document);
+      await persistenceService.persistDocument(document);
       addActivity({
         userId: getViewer().id,
         type: "document_uploaded",
@@ -820,6 +854,7 @@ export const createServer = () => {
 
   app.get("/api/documents/:id/access", asyncHandler(async (request, response) => {
     if (!requireCapability(response, "view_documents", "You do not have access to patient documents.")) return;
+    await persistenceService.hydrateDocumentsForPatient(getPatient().id);
     const document = state.documents.find((item) => item.id === request.params.id);
     if (!document) {
       response.status(404).json({ message: "Document not found." });
@@ -851,8 +886,9 @@ export const createServer = () => {
     });
   }));
 
-  app.patch("/api/documents/:id", (request, response) => {
+  app.patch("/api/documents/:id", asyncHandler(async (request, response) => {
     if (!requireCapability(response, "upload_documents", "You do not have permission to update documents.")) return;
+    await persistenceService.hydrateDocumentsForPatient(getPatient().id);
     const document = state.documents.find((item) => item.id === request.params.id);
     if (!document) {
       response.status(404).json({ message: "Document not found." });
@@ -866,11 +902,13 @@ export const createServer = () => {
       document.documentDate = trimmedText(request.body.documentDate);
     }
 
+    await persistenceService.persistDocument(document);
     response.json({ document });
-  });
+  }));
 
   app.post("/api/documents/:id/reprocess", asyncHandler(async (request, response) => {
     if (!requireCapability(response, "upload_documents", "You do not have permission to reprocess this document.")) return;
+    await persistenceService.hydrateDocumentsForPatient(getPatient().id);
     const document = state.documents.find((item) => item.id === request.params.id);
     if (!document) {
       response.status(404).json({ message: "Document not found." });
@@ -889,6 +927,7 @@ export const createServer = () => {
     };
     document.aiActionItems = analysis.action_items;
     document.isProcessed = true;
+    await persistenceService.persistDocument(document);
     recordAudit({
       action: "document_reprocessed",
       resourceType: "document",
@@ -899,15 +938,19 @@ export const createServer = () => {
     response.json({ document });
   }));
 
-  app.delete("/api/documents/:id", (request, response) => {
+  app.delete("/api/documents/:id", asyncHandler(async (request, response) => {
     if (!requireCapability(response, "upload_documents", "You do not have permission to delete documents.")) return;
+    await persistenceService.hydrateDocumentsForPatient(getPatient().id);
     const index = state.documents.findIndex((item) => item.id === request.params.id);
     if (index === -1) {
       response.status(404).json({ message: "Document not found." });
       return;
     }
 
-    state.documents.splice(index, 1);
+    const [document] = state.documents.splice(index, 1);
+    if (document) {
+      await persistenceService.deleteDocument(document);
+    }
     recordAudit({
       action: "document_deleted",
       resourceType: "document",
@@ -915,7 +958,7 @@ export const createServer = () => {
       detail: "Deleted a patient document",
     });
     response.status(204).end();
-  });
+  }));
 
   app.get("/api/appointments", (_request, response) => {
     if (!requireCapability(response, "view_appointments", "You do not have access to appointments for this patient.")) return;

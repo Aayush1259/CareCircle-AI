@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Download, FileSearch, Trash2, UploadCloud } from "lucide-react";
 import toast from "react-hot-toast";
 import type { DocumentRecord } from "@carecircle/shared";
@@ -35,6 +35,7 @@ export const DocumentsPage = () => {
   const [sort, setSort] = useState("newest");
   const [documentDate, setDocumentDate] = useState(new Date().toISOString().slice(0, 10));
   const [notes, setNotes] = useState("");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   if (!bootstrap) return null;
 
@@ -96,6 +97,33 @@ export const DocumentsPage = () => {
     const nextFile = validateFile(file);
     if (!nextFile) return;
     setPendingFile(nextFile);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const clearPendingFile = () => {
+    setPendingFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const openFilePicker = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleDragState = (event: React.DragEvent<HTMLDivElement>, active: boolean) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setDragActive(active);
+  };
+
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setDragActive(false);
+    chooseFile(event.dataTransfer.files?.[0]);
   };
 
   const uploadFile = async () => {
@@ -116,7 +144,7 @@ export const DocumentsPage = () => {
         body: formData,
       });
       toast.success("Document processed - AI analysis ready.");
-      setPendingFile(null);
+      clearPendingFile();
       setNotes("");
       setDocumentDate(new Date().toISOString().slice(0, 10));
       await refresh();
@@ -217,30 +245,40 @@ export const DocumentsPage = () => {
       <Card>
         <SectionHeader title="Upload documents" description="Drop a document here and CareCircle will explain it in plain language." />
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-          <label
+          <div
             className={`flex min-h-[160px] cursor-pointer flex-col items-center justify-center rounded-[28px] border-2 border-dashed p-6 text-center transition ${
               dragActive ? "border-brand bg-brandSoft/60" : "border-brand/35 bg-brandSoft/30"
             }`}
-            onDragEnter={() => setDragActive(true)}
-            onDragLeave={() => setDragActive(false)}
-            onDragOver={(event) => {
-              event.preventDefault();
-              setDragActive(true);
-            }}
-            onDrop={(event) => {
-              event.preventDefault();
-              setDragActive(false);
-              chooseFile(event.dataTransfer.files?.[0]);
-            }}
+            onClick={openFilePicker}
+            onDragEnter={(event) => handleDragState(event, true)}
+            onDragLeave={(event) => handleDragState(event, false)}
+            onDragOver={(event) => handleDragState(event, true)}
+            onDrop={handleDrop}
           >
             <UploadCloud className="h-12 w-12 text-brandDark" />
             <p className="mt-4 text-xl font-bold text-textPrimary">Drop a document here</p>
             <p className="mt-2 text-sm text-textSecondary">PDF, JPG, JPEG, or PNG up to 20MB</p>
             <div className="mt-5">
-              <Button type="button" variant="secondary">Choose file</Button>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  openFilePicker();
+                }}
+              >
+                Choose file
+              </Button>
             </div>
-            <input className="hidden" type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(event) => chooseFile(event.target.files?.[0])} />
-          </label>
+          </div>
+          <input
+            ref={fileInputRef}
+            className="hidden"
+            type="file"
+            accept=".pdf,.jpg,.jpeg,.png"
+            onChange={(event) => chooseFile(event.target.files?.[0])}
+          />
 
           <div className="space-y-4">
             {pendingFile ? (
@@ -250,7 +288,7 @@ export const DocumentsPage = () => {
                     <p className="font-semibold text-textPrimary">{pendingFile.name}</p>
                     <p className="mt-1 text-sm text-textSecondary">{(pendingFile.size / (1024 * 1024)).toFixed(1)} MB</p>
                   </div>
-                  <button type="button" className="text-sm font-semibold text-red-700" onClick={() => setPendingFile(null)}>
+                  <button type="button" className="text-sm font-semibold text-red-700" onClick={clearPendingFile}>
                     Remove
                   </button>
                 </div>
