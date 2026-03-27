@@ -1,4 +1,4 @@
-import cors from "cors";
+import cors, { type CorsOptions } from "cors";
 import express from "express";
 import multer from "multer";
 import type {
@@ -99,6 +99,15 @@ const getBearerToken = (request: express.Request) => {
   return header.slice(7);
 };
 
+const normalizeOrigin = (origin?: string) => {
+  if (!origin) return "";
+  try {
+    return new URL(origin).origin;
+  } catch {
+    return origin.replace(/\/+$/, "");
+  }
+};
+
 const isLoopbackOrigin = (origin: string) => {
   try {
     const url = new URL(origin);
@@ -109,9 +118,10 @@ const isLoopbackOrigin = (origin: string) => {
 };
 
 const isAllowedOrigin = (origin?: string) => {
-  if (!origin) return true;
-  if (env.frontendOrigins.includes(origin)) return true;
-  return isLoopbackOrigin(origin) && env.frontendOrigins.some((item) => isLoopbackOrigin(item));
+  const normalizedOrigin = normalizeOrigin(origin);
+  if (!normalizedOrigin) return true;
+  if (env.frontendOrigins.includes(normalizedOrigin)) return true;
+  return isLoopbackOrigin(normalizedOrigin) && env.frontendOrigins.some((item) => isLoopbackOrigin(item));
 };
 
 export const createServer = () => {
@@ -123,18 +133,23 @@ export const createServer = () => {
     cronRegistered = true;
   }
 
-  app.use(
-    cors({
-      origin(origin, callback) {
-        if (isAllowedOrigin(origin)) {
-          callback(null, true);
-          return;
-        }
-        callback(new Error(`Origin ${origin ?? "unknown"} is not allowed by CareCircle API CORS.`));
-      },
-      credentials: true,
-    }),
-  );
+  const corsOptions: CorsOptions = {
+    origin(origin, callback) {
+      if (isAllowedOrigin(origin)) {
+        callback(null, true);
+        return;
+      }
+      console.warn(`Blocked CORS origin: ${origin ?? "unknown"}`);
+      callback(null, false);
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    optionsSuccessStatus: 204,
+  };
+
+  app.use(cors(corsOptions));
+  app.options("*", cors(corsOptions));
   app.use(express.json({ limit: "10mb" }));
   app.use(express.urlencoded({ extended: true }));
 
