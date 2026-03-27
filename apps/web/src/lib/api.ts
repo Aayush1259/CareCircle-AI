@@ -12,9 +12,12 @@ const resolveApiBase = () => {
 
 export const apiBase = resolveApiBase();
 export const authStorageKey = "carecircle_auth_token";
+export const activePatientStorageKey = "carecircle_active_patient_id";
 
 export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const token = typeof window !== "undefined" ? window.localStorage.getItem(authStorageKey) : null;
+  const activePatientId =
+    typeof window !== "undefined" ? window.sessionStorage.getItem(activePatientStorageKey) : null;
   const isFormData = init?.body instanceof FormData;
   let response: Response;
   try {
@@ -23,6 +26,7 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
       headers: {
         ...(isFormData ? {} : { "Content-Type": "application/json" }),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(activePatientId ? { "X-CareCircle-Patient-Id": activePatientId } : {}),
         ...(init?.headers ?? {}),
       },
     });

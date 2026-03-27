@@ -44,6 +44,7 @@ export const env = {
   smtpUser: process.env.SMTP_USER,
   smtpPass: process.env.SMTP_PASS,
   smtpFrom: process.env.SMTP_FROM ?? "CareCircle AI <noreply@carecircle.ai>",
+  googleAuthEnabled: process.env.SUPABASE_GOOGLE_AUTH_ENABLED === "true",
 };
 
 export const featureFlags = {

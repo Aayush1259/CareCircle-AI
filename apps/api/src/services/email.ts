@@ -3,17 +3,17 @@ import { env, featureFlags } from "../env";
 
 const transporter = featureFlags.smtpEnabled
   ? nodemailer.createTransport({
-      host: env.smtpHost,
-      port: env.smtpPort,
-      secure: env.smtpPort === 465,
-      auth: {
-        user: env.smtpUser,
-        pass: env.smtpPass,
-      },
-    })
+    host: env.smtpHost,
+    port: env.smtpPort,
+    secure: env.smtpPort === 465,
+    auth: {
+      user: env.smtpUser,
+      pass: env.smtpPass,
+    },
+  })
   : nodemailer.createTransport({
-      jsonTransport: true,
-    });
+    jsonTransport: true,
+  });
 
 export const emailService = {
   async send(

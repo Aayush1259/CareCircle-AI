@@ -3,13 +3,14 @@ import { Activity, CalendarDays, FileText, HeartPulse, Shield, Stethoscope } fro
 import { Badge, Card, EmptyState, SectionHeader } from "@/components/ui";
 import { useAppData } from "@/context/AppDataContext";
 import { calcAge, formatDate, relativeTime } from "@/lib/format";
-import { roleLabel } from "@/lib/roles";
+import { resolveViewerRole, roleLabel } from "@/lib/roles";
 
 export const DoctorHomePage = () => {
   const { bootstrap } = useAppData();
   if (!bootstrap) return null;
 
   const { viewer, patient, dashboard, data } = bootstrap;
+  const viewerRole = resolveViewerRole(viewer.role, bootstrap.viewerAccess?.accessRole);
   const recentVitals = data.healthVitals.slice(0, 3);
   const recentNotes = data.careJournal.slice(0, 3);
 
@@ -20,7 +21,7 @@ export const DoctorHomePage = () => {
           <p className="eyebrow">Clinical view</p>
           <h1 className="mt-2 text-3xl font-bold text-textPrimary">A clearer clinical snapshot.</h1>
         </div>
-        <Badge tone="brand">{roleLabel(viewer.role)}</Badge>
+        <Badge tone="brand">{roleLabel(viewerRole)}</Badge>
       </div>
 
       <Card className="overflow-hidden bg-gradient-to-r from-slate-950 to-brandDark text-white shadow-calm">
@@ -93,12 +94,6 @@ export const DoctorHomePage = () => {
             <div className="rounded-3xl bg-slate-50 p-4">
               <p className="text-sm font-semibold text-textPrimary">Allergies</p>
               <p className="mt-1 text-sm leading-7 text-textSecondary">{patient.allergies.join(", ") || "None listed"}</p>
-            </div>
-            <div className="rounded-3xl bg-slate-50 p-4">
-              <p className="text-sm font-semibold text-textPrimary">Insurance</p>
-              <p className="mt-1 text-sm leading-7 text-textSecondary">
-                {patient.insuranceProvider} - {patient.insuranceId}
-              </p>
             </div>
             <div className="rounded-3xl bg-slate-50 p-4">
               <p className="text-sm font-semibold text-textPrimary">Mobility</p>

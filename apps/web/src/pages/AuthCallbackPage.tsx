@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import { LoadingState } from "@/components/ui";
 import { useAppData } from "@/context/AppDataContext";
-import { roleHomePath } from "@/lib/roles";
+import { resolveViewerRole, roleHomePath } from "@/lib/roles";
 
 export const AuthCallbackPage = () => {
   const navigate = useNavigate();
@@ -27,7 +27,10 @@ export const AuthCallbackPage = () => {
             navigate(`/invite/${encodeURIComponent(payload.inviteToken ?? inviteToken ?? "")}`, { replace: true });
             return;
           }
-          navigate(next ?? roleHomePath(payload.session.viewer.role), { replace: true });
+          navigate(
+            next ?? roleHomePath(resolveViewerRole(payload.session.viewer.role, payload.session.access?.accessRole)),
+            { replace: true },
+          );
         } catch (error) {
           toast.error(error instanceof Error ? error.message : "Google sign-in could not be completed.");
           navigate("/login", { replace: true });
@@ -37,7 +40,16 @@ export const AuthCallbackPage = () => {
     }
 
     if (session || bootstrap) {
-      navigate(next ?? roleHomePath(session?.viewer.role ?? bootstrap?.viewer.role), { replace: true });
+      navigate(
+        next ??
+          roleHomePath(
+            resolveViewerRole(
+              session?.viewer.role ?? bootstrap?.viewer.role,
+              session?.access?.accessRole ?? bootstrap?.viewerAccess?.accessRole,
+            ),
+          ),
+        { replace: true },
+      );
       return;
     }
     navigate("/login", { replace: true });

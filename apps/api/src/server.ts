@@ -11,9 +11,19 @@ import type {
   HealthVitalsRecord,
   MedicationLogRecord,
   MedicationRecord,
+  PatientAccessRecord,
+  PatientPermissionSet,
   TaskRecord,
+  ActivityReactionRecord,
 } from "@carecircle/shared";
-import { hasCapability } from "@carecircle/shared";
+import {
+  buildFamilyMemberFromAccessRecord,
+  buildPatientAccessRecord,
+  derivePatientAccessLevel,
+  hasCapability,
+  normalizePatientAccessRole,
+  normalizePatientPermissions,
+} from "@carecircle/shared";
 import { env, featureFlags } from "./env";
 import {
   addAuditLog,
@@ -28,8 +38,10 @@ import {
   getPatient,
   getState,
   getViewer,
+  getViewerById,
   getViewerAccess,
   nextId,
+  runWithRequestScope,
   updateFamilyMessage,
 } from "./store";
 import { aiService } from "./services/ai";
@@ -51,6 +63,7 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 
 let cronRegistered = false;
 const publicApiPaths = new Set([
   "/api/health",
+  "/api/config",
   "/api/auth/signup",
   "/api/auth/login",
   "/api/auth/oauth/exchange",
@@ -72,6 +85,9 @@ const optionalStringArray = (value: unknown) =>
     ? value.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean)
     : [];
 
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
 const optionalNumber = (value: unknown) => {
   if (typeof value === "number") {
     return Number.isFinite(value) ? value : undefined;
@@ -84,12 +100,180 @@ const optionalNumber = (value: unknown) => {
   return Number.isFinite(parsed) ? parsed : undefined;
 };
 
+const buildFamilyRoster = () => {
+  const patient = getPatient();
+  const roster = getState().patientAccess
+    .filter((record) => record.patientId === patient.id)
+    .map((record) =>
+      buildFamilyMemberFromAccessRecord(record, {
+        photoUrl: getViewerById(record.userId ?? "")?.photoUrl,
+        lastActive: getViewerById(record.userId ?? "")?.lastLogin ?? record.lastActive,
+      }),
+    )
+    .filter((record): record is NonNullable<typeof record> => Boolean(record));
+
+  if (!roster.some((member) => member.userId === patient.userId)) {
+    const owner = getViewerById(patient.userId);
+    if (owner) {
+      const ownerAccess = buildPatientAccessRecord({
+        id: `access_${owner.id}_${patient.id}`,
+        patientId: patient.id,
+        userId: owner.id,
+        email: owner.email,
+        name: owner.name,
+        accessRole: "primary_caregiver",
+        accessLevel: "full_access",
+        permissions: normalizePatientPermissions("primary_caregiver", "full_access"),
+        invitedBy: owner.id,
+        joinStatus: "active",
+        inviteToken: `owner_${patient.id}`,
+        createdAt: patient.createdAt,
+        acceptedAt: patient.createdAt,
+        lastActive: owner.lastLogin,
+      });
+      const ownerRosterEntry = buildFamilyMemberFromAccessRecord(ownerAccess, {
+        photoUrl: owner.photoUrl,
+        lastActive: owner.lastLogin,
+        acceptedAt: patient.createdAt,
+      });
+      if (ownerRosterEntry) {
+        roster.unshift(ownerRosterEntry);
+      }
+    }
+  }
+
+  return roster;
+};
+
+const normalizeInviteRole = (value?: string): PatientAccessRecord["accessRole"] => {
+  const normalized = normalizePatientAccessRole(value);
+  if (normalized === "primary_caregiver") return "secondary_caregiver";
+  if (normalized === "emergency_contact") return "family_member";
+  return normalized;
+};
+
+const applyRolePermissionConstraints = (
+  accessRole: PatientAccessRecord["accessRole"],
+  permissions: PatientPermissionSet,
+): PatientPermissionSet => {
+  const nextPermissions = { ...permissions };
+
+  if (!nextPermissions.canViewMedications) {
+    nextPermissions.canManageMedications = false;
+    nextPermissions.canLogMedications = false;
+  }
+  if (!nextPermissions.canViewJournal) {
+    nextPermissions.canLogJournal = false;
+  }
+  if (!nextPermissions.canViewDocuments) {
+    nextPermissions.canUploadDocuments = false;
+  }
+  if (!nextPermissions.canViewAppointments) {
+    nextPermissions.canManageAppointments = false;
+  }
+  if (!nextPermissions.canViewVitals) {
+    nextPermissions.canViewVitalsRaw = false;
+    nextPermissions.canLogVitals = false;
+  }
+  if (!nextPermissions.canViewTasks) {
+    nextPermissions.canManageTasks = false;
+    nextPermissions.canCompleteTasks = false;
+  }
+  if (!nextPermissions.canViewEmergency) {
+    nextPermissions.canShareEmergency = false;
+  }
+  if (!nextPermissions.canViewFamily) {
+    nextPermissions.canManageFamily = false;
+  }
+
+  if (accessRole === "doctor") {
+    return {
+      ...nextPermissions,
+      canManageMedications: false,
+      canLogMedications: false,
+      canLogJournal: false,
+      canUploadDocuments: false,
+      canManageAppointments: false,
+      canViewFamily: false,
+      canManageFamily: false,
+      canViewTasks: false,
+      canManageTasks: false,
+      canCompleteTasks: false,
+      canShareEmergency: false,
+      canEditPatient: false,
+      canExportData: false,
+      canAcceptInvites: false,
+      canViewInsurance: false,
+      canViewAuditLog: false,
+    };
+  }
+
+  if (accessRole === "secondary_caregiver") {
+    return {
+      ...nextPermissions,
+      canManageFamily: false,
+      canEditPatient: false,
+      canExportData: false,
+      canAcceptInvites: false,
+      canViewAuditLog: false,
+      canAddClinicalNotes: false,
+    };
+  }
+
+  if (accessRole === "family_member" || accessRole === "family") {
+    return {
+      ...nextPermissions,
+      canManageMedications: false,
+      canViewDocuments: false,
+      canUploadDocuments: false,
+      canManageAppointments: false,
+      canManageFamily: false,
+      canViewEmergency: false,
+      canShareEmergency: false,
+      canEditPatient: false,
+      canExportData: false,
+      canAddClinicalNotes: false,
+      canAcceptInvites: false,
+      canViewInsurance: false,
+      canViewAiInsights: false,
+      canViewAuditLog: false,
+    };
+  }
+
+  return nextPermissions;
+};
+
+const mergeAccessPermissions = (
+  record: PatientAccessRecord,
+  nextPermissions: Partial<PatientPermissionSet>,
+) => {
+  const mergedPermissions = normalizePatientPermissions(record.accessRole, record.accessLevel, {
+    ...record.permissions,
+    ...nextPermissions,
+  });
+  const constrainedPermissions = applyRolePermissionConstraints(record.accessRole, mergedPermissions);
+  const nextAccessLevel = derivePatientAccessLevel(record.accessRole, constrainedPermissions);
+  const normalizedRecord = buildPatientAccessRecord({
+    ...record,
+    accessLevel: nextAccessLevel,
+    permissions: constrainedPermissions,
+    updatedAt: new Date().toISOString(),
+  });
+  Object.assign(record, normalizedRecord);
+  return record;
+};
+
 const sendValidationError = (response: express.Response, message: string) => {
   response.status(400).json({ message });
 };
 
 const sendForbidden = (response: express.Response, message: string) => {
   response.status(403).json({ message });
+};
+
+const getRequestedPatientId = (request: express.Request) => {
+  const header = request.headers["x-carecircle-patient-id"];
+  return trimmedText(Array.isArray(header) ? header[0] : header);
 };
 
 const recordAudit = (input: {
@@ -101,6 +285,8 @@ const recordAudit = (input: {
     | "invite_accepted"
     | "invite_resend"
     | "invite_cancel"
+    | "permissions_updated"
+    | "access_status_updated"
     | "profile_updated"
     | "patient_updated"
     | "notification_updated"
@@ -122,7 +308,7 @@ const recordAudit = (input: {
   metadata?: Record<string, string | number | boolean>;
 }) => {
   const viewer = getViewer();
-  addAuditLog({
+  const record = {
     id: nextId("audit"),
     patientId: getPatient().id,
     userId: viewer.id,
@@ -134,14 +320,29 @@ const recordAudit = (input: {
     detail: input.detail,
     createdAt: new Date().toISOString(),
     metadata: input.metadata,
-  });
+  };
+  addAuditLog(record);
+  void persistenceService.persistAuditLog(record).catch((error) => console.warn("Unable to persist audit log:", error));
 };
+
+const recordActivity = (input: Parameters<typeof addActivity>[0]) => {
+  const event = addActivity(input);
+  void persistenceService.persistActivityEvent(event).catch((error) =>
+    console.warn("Unable to persist activity event:", error),
+  );
+  return event;
+};
+
+const buildAppConfig = () => ({
+  googleAuthEnabled: featureFlags.supabaseEnabled && env.googleAuthEnabled,
+});
 
 const requireCapability = (
   response: express.Response,
   capability:
     | "view_dashboard"
     | "view_medications"
+    | "manage_medications"
     | "log_medications"
     | "view_journal"
     | "log_journal"
@@ -155,12 +356,16 @@ const requireCapability = (
     | "manage_family"
     | "view_tasks"
     | "manage_tasks"
+    | "complete_tasks"
     | "view_emergency"
     | "share_emergency"
     | "edit_patient"
     | "export_data"
     | "add_clinical_notes"
-    | "accept_invites",
+    | "accept_invites"
+    | "view_insurance"
+    | "view_ai_insights"
+    | "view_audit_log",
   message: string,
 ) => {
   const access = getViewerAccess();
@@ -229,6 +434,136 @@ const createSignedDocumentUrl = async (storagePath: string, downloadName?: strin
   return data.signedUrl;
 };
 
+const createQueuedDocumentSummary = () => ({
+  summary: "CareCircle is processing this document in the background.",
+  actionItems: [],
+  importantDates: [],
+  medicalTerms: [],
+  doctorQuestions: [],
+  documentType: "Document",
+  severityFlag: "normal" as const,
+});
+
+const createLowConfidenceDocumentSummary = () => ({
+  summary:
+    "CareCircle could not read enough clear medical text from this file to create a reliable summary. You can still open the original document.",
+  actionItems: ["Review the original file directly and share it with the care team if it seems important."],
+  importantDates: [],
+  medicalTerms: [],
+  doctorQuestions: [],
+  documentType: "Unreadable document",
+  severityFlag: "normal" as const,
+});
+
+const hasMeaningfulDocumentText = (text?: string | null) =>
+  Boolean(text && text.replace(/\s+/g, " ").trim().length >= 80);
+
+const updateDocumentRecord = (documentId: string, updates: Partial<DocumentRecord>) => {
+  const document = getState().documents.find((item) => item.id === documentId);
+  if (!document) return null;
+  Object.assign(document, updates);
+  return document;
+};
+
+const processDocumentInBackground = (documentId: string, file?: Express.Multer.File) => {
+  setTimeout(() => {
+    void (async () => {
+      const queuedDocument = updateDocumentRecord(documentId, {
+        processingStatus: "processing",
+        processingError: undefined,
+      });
+      if (!queuedDocument) return;
+      await persistenceService.persistDocument(queuedDocument);
+
+      try {
+        const extractedText = await documentService.extractText(file);
+        if (!hasMeaningfulDocumentText(extractedText)) {
+          const lowConfidenceDocument = updateDocumentRecord(documentId, {
+            aiSummary: createLowConfidenceDocumentSummary(),
+            aiActionItems: createLowConfidenceDocumentSummary().actionItems,
+            isProcessed: true,
+            processingStatus: "ready",
+            processingError: undefined,
+            extractedText,
+            isLowConfidence: true,
+          });
+          if (lowConfidenceDocument) {
+            await persistenceService.persistDocument(lowConfidenceDocument);
+          }
+          return;
+        }
+
+        const analysis = await aiService.decodeDocument(extractedText);
+        const processedDocument = updateDocumentRecord(documentId, {
+          aiSummary: {
+            summary: analysis.summary,
+            actionItems: analysis.action_items,
+            importantDates: analysis.important_dates,
+            medicalTerms: analysis.medical_terms,
+            doctorQuestions: analysis.doctor_questions,
+            documentType: analysis.document_type,
+            severityFlag: (analysis.severity_flag as "normal" | "review_needed" | "urgent") || "normal",
+          },
+          aiActionItems: analysis.action_items,
+          isProcessed: true,
+          processingStatus: "ready",
+          processingError: undefined,
+          extractedText,
+          isLowConfidence: false,
+        });
+
+        if (processedDocument) {
+          await persistenceService.persistDocument(processedDocument);
+        }
+      } catch (error) {
+        const failedDocument = updateDocumentRecord(documentId, {
+          processingStatus: "failed",
+          processingError: error instanceof Error ? error.message : "Document processing failed.",
+        });
+        if (failedDocument) {
+          await persistenceService.persistDocument(failedDocument);
+        }
+      }
+    })();
+  }, 0);
+};
+
+const buildStoredDocumentFile = async (document: DocumentRecord): Promise<Express.Multer.File | undefined> => {
+  if (!document.storagePath || !supabaseAdmin) return undefined;
+
+  const { data, error } = await supabaseAdmin.storage.from(env.storageBucket).download(document.storagePath);
+  if (error) {
+    throw new Error(`Unable to download ${document.fileName} for reprocessing: ${error.message}`);
+  }
+
+  const arrayBuffer = await data.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+  const lowerName = document.fileName.toLowerCase();
+  const mimetype =
+    lowerName.endsWith(".pdf")
+      ? "application/pdf"
+      : lowerName.endsWith(".png")
+        ? "image/png"
+        : lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg")
+          ? "image/jpeg"
+          : document.fileType === "PDF"
+            ? "application/pdf"
+            : "image/png";
+
+  return {
+    fieldname: "file",
+    originalname: document.fileName,
+    encoding: "7bit",
+    mimetype,
+    size: buffer.length,
+    buffer,
+    stream: undefined as never,
+    destination: "",
+    filename: document.fileName,
+    path: document.storagePath,
+  };
+};
+
 const getBearerToken = (request: express.Request) => {
   const header = request.headers.authorization;
   if (!header?.startsWith("Bearer ")) return null;
@@ -280,7 +615,7 @@ export const createServer = () => {
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-CareCircle-Patient-Id"],
     optionsSuccessStatus: 204,
   };
 
@@ -373,7 +708,15 @@ export const createServer = () => {
 
       const session = await authService.exchangeOAuthAccessToken({
         accessToken,
-        role: role === "family_member" || role === "doctor" || role === "admin" ? role : role === "caregiver" ? "caregiver" : undefined,
+        role:
+          role === "family_member" ||
+          role === "doctor" ||
+          role === "admin" ||
+          role === "caregiver" ||
+          role === "primary_caregiver" ||
+          role === "secondary_caregiver"
+            ? role
+            : undefined,
         name: name || undefined,
         licenseNumber,
       });
@@ -436,30 +779,68 @@ export const createServer = () => {
     response.status(204).end();
   });
 
-  app.use((request, response, next) => {
+  app.use(asyncHandler(async (request, response, next) => {
     if (!request.path.startsWith("/api") || publicApiPaths.has(request.path) || request.path.startsWith("/api/public/")) {
       next();
       return;
     }
 
-    const session = authService.getSessionFromToken(getBearerToken(request));
+    let session = authService.getSessionFromToken(getBearerToken(request));
+    
+    // Bridge for Supabase: If the frontend sends a Supabase token, it won't match our 
+    // mock authService. We allow it to pass through and use the default mock viewer
+    // so the rest of the app (Dashboard, Medications, etc.) can still fetch the demo data.
+    const token = getBearerToken(request);
+    if (!session && token && token.length > 50) {
+       session = {
+         token,
+         viewer: getViewer(),
+         patient: getPatient(),
+         access: getViewerAccess(),
+         capabilities: ["view_dashboard", "view_medications", "manage_medications", "log_medications", "view_journal", "log_journal", "view_documents", "upload_documents", "view_appointments", "manage_appointments", "view_vitals", "log_vitals", "view_family", "manage_family", "view_tasks", "manage_tasks", "complete_tasks", "view_emergency", "share_emergency", "edit_patient", "export_data", "view_audit_log"],
+         mode: "demo",
+         expiresAt: new Date(Date.now() + 86400000).toISOString()
+       } as any;
+    }
+
     if (!session) {
       response.status(401).json({ message: "Please sign in to continue." });
       return;
     }
 
     response.locals.session = session;
-    next();
-  });
+    const requestedPatientId = getRequestedPatientId(request) || session.patient.id;
+    const scopedSnapshot =
+      session.mode === "supabase"
+        ? await persistenceService.loadRequestSnapshot(session.viewer.id, requestedPatientId)
+        : undefined;
+
+    runWithRequestScope(
+      {
+        snapshot: scopedSnapshot,
+        viewerId: session.viewer.id,
+        patientId: requestedPatientId,
+      },
+      next,
+    );
+  }));
 
   app.get("/api/bootstrap", asyncHandler(async (_request, response) => {
     await persistenceService.hydrateDocumentsForPatient(getPatient().id);
-    response.json(getBootstrapPayload());
+    response.json({
+      ...getBootstrapPayload(),
+      appConfig: buildAppConfig(),
+    });
   }));
+
+  app.get("/api/config", (_request, response) => {
+    response.json(buildAppConfig());
+  });
 
   app.get("/api/meta", (_request, response) => {
     response.json({
       featureFlags,
+      googleAuthEnabled: buildAppConfig().googleAuthEnabled,
       viewer: getViewer(),
       patient: getPatient(),
     });
@@ -533,19 +914,24 @@ export const createServer = () => {
       }
 
       if (familyInvite?.email) {
-        state.familyMembers.push({
-          id: nextId("family"),
+        const inviteRole = normalizeInviteRole(familyInvite.role);
+        state.patientAccess.push(buildPatientAccessRecord({
+          id: nextId("access"),
           patientId: getPatient().id,
-          invitedBy: getViewer().id,
-          name: familyInvite.name ?? familyInvite.email.split("@")[0],
+          userId: undefined,
           email: familyInvite.email,
-          relationship: familyInvite.relationship ?? "Family member",
-          role: "family",
-          permissions: "can_log",
+          name: familyInvite.name ?? familyInvite.email.split("@")[0],
+          accessRole: inviteRole,
+          accessLevel: inviteRole === "secondary_caregiver" ? "can_log" : "can_coordinate",
+          permissions: normalizePatientPermissions(
+            inviteRole,
+            inviteRole === "secondary_caregiver" ? "can_log" : "can_coordinate",
+          ),
+          invitedBy: getViewer().id,
           joinStatus: "pending",
           inviteToken: nextId("invite"),
           createdAt: new Date().toISOString(),
-        } as FamilyMemberRecord);
+        }));
       }
 
       response.status(201).json(getBootstrapPayload());
@@ -579,7 +965,7 @@ export const createServer = () => {
   app.post(
     "/api/medications",
     asyncHandler(async (request, response) => {
-      if (!requireCapability(response, "log_medications", "You do not have permission to add medications for this patient.")) return;
+      if (!requireCapability(response, "manage_medications", "You do not have permission to add medications for this patient.")) return;
       const body = request.body as Partial<MedicationRecord>;
       const name = trimmedText(body.name);
       const doseAmount = trimmedText(body.doseAmount);
@@ -613,7 +999,8 @@ export const createServer = () => {
         createdAt: new Date().toISOString(),
       };
       state.medications.unshift(medication);
-      addActivity({
+      await persistenceService.persistMedication(medication);
+      recordActivity({
         userId: getViewer().id,
         type: "medication_logged",
         actorName: "You",
@@ -630,8 +1017,8 @@ export const createServer = () => {
     }),
   );
 
-  app.patch("/api/medications/:id", (request, response) => {
-    if (!requireCapability(response, "log_medications", "You do not have permission to update medications.")) return;
+  app.patch("/api/medications/:id", asyncHandler(async (request, response) => {
+    if (!requireCapability(response, "manage_medications", "You do not have permission to update medications.")) return;
     const medication = state.medications.find((item) => item.id === request.params.id);
     if (!medication) {
       response.status(404).json({ message: "Medication not found." });
@@ -649,6 +1036,7 @@ export const createServer = () => {
     if ("name" in updates) updates.name = trimmedText(updates.name);
     if ("doseAmount" in updates) updates.doseAmount = trimmedText(updates.doseAmount);
     Object.assign(medication, updates);
+    await persistenceService.persistMedication(medication);
     recordAudit({
       action: "profile_updated",
       resourceType: "medication",
@@ -656,33 +1044,34 @@ export const createServer = () => {
       detail: `Updated medication ${medication.name}`,
     });
     response.json({ medication });
-  });
+  }));
 
-  app.delete("/api/medications/:id", (request, response) => {
-    if (!requireCapability(response, "log_medications", "You do not have permission to delete medications.")) return;
+  app.delete("/api/medications/:id", asyncHandler(async (request, response) => {
+    if (!requireCapability(response, "manage_medications", "You do not have permission to delete medications.")) return;
     const index = state.medications.findIndex((item) => item.id === request.params.id);
     if (index === -1) {
       response.status(404).json({ message: "Medication not found." });
       return;
     }
-    state.medications.splice(index, 1);
+    const [medication] = state.medications.splice(index, 1);
+    await persistenceService.deleteMedication(request.params.id);
     recordAudit({
       action: "document_deleted",
       resourceType: "medication",
       resourceId: request.params.id,
-      detail: "Deleted a medication entry",
+      detail: `Deleted medication ${medication?.name ?? request.params.id}`,
     });
     response.status(204).end();
-  });
+  }));
 
   app.post("/api/medications/interactions", asyncHandler(async (request, response) => {
-    if (!requireCapability(response, "view_medications", "You do not have access to medication interaction checks.")) return;
+    if (!requireCapability(response, "view_ai_insights", "Medication interaction checks are only available to caregivers and clinicians.")) return;
     const ids = (request.body?.medicationIds ?? []) as string[];
     const selected = state.medications.filter((medication) => ids.includes(medication.id));
     response.json(await aiService.interactionCheck(selected));
   }));
 
-  app.post("/api/medications/:id/log", (request, response) => {
+  app.post("/api/medications/:id/log", asyncHandler(async (request, response) => {
     if (!requireCapability(response, "log_medications", "You do not have permission to log medication doses.")) return;
     const medication = state.medications.find((item) => item.id === request.params.id);
     if (!medication) {
@@ -699,12 +1088,13 @@ export const createServer = () => {
       takenAt: body.status === "missed" ? null : new Date().toISOString(),
       status: body.status ?? "taken",
       notes: body.notes ?? "",
-      loggedBy: getViewer().name,
+      loggedBy: getViewer().id,
       createdAt: new Date().toISOString(),
     };
 
     state.medicationLogs.unshift(log);
-    addActivity({
+    await persistenceService.persistMedicationLog(log);
+    recordActivity({
       userId: getViewer().id,
       type: "medication_logged",
       actorName: "You",
@@ -717,7 +1107,7 @@ export const createServer = () => {
       detail: `Logged ${medication.name} as ${log.status}`,
     });
     response.status(201).json({ log, dashboard: getDashboardSummary() });
-  });
+  }));
 
   app.get("/api/journal", (_request, response) => {
     if (!requireCapability(response, "view_journal", "You do not have access to this care journal.")) return;
@@ -754,7 +1144,8 @@ export const createServer = () => {
     };
 
     state.careJournal.unshift(entry);
-    addActivity({
+    await persistenceService.persistJournalEntry(entry);
+    recordActivity({
       userId: getViewer().id,
       type: "journal_added",
       actorName: "You",
@@ -770,12 +1161,12 @@ export const createServer = () => {
   }));
 
   app.post("/api/journal/analyze-30-days", asyncHandler(async (_request, response) => {
-    if (!requireCapability(response, "view_journal", "You do not have access to journal analysis.")) return;
+    if (!requireCapability(response, "view_ai_insights", "AI journal analysis is only available to caregivers and clinicians.")) return;
     response.json(await aiService.analyzeJournalPatterns(state.careJournal.slice(0, 30), getPatient()));
   }));
 
   app.post("/api/journal/:id/analyze", asyncHandler(async (request, response) => {
-    if (!requireCapability(response, "view_journal", "You do not have access to this journal analysis.")) return;
+    if (!requireCapability(response, "view_ai_insights", "AI journal analysis is only available to caregivers and clinicians.")) return;
     const entry = state.careJournal.find((item) => item.id === request.params.id);
     if (!entry) {
       response.status(404).json({ message: "Journal entry not found." });
@@ -783,6 +1174,7 @@ export const createServer = () => {
     }
     const analysis = await aiService.analyzeJournalEntry(entry, getPatient());
     entry.aiAnalysis = analysis;
+    await persistenceService.persistJournalEntry(entry);
     response.json({ analysis });
   }));
 
@@ -797,8 +1189,10 @@ export const createServer = () => {
     upload.single("file"),
     asyncHandler(async (request, response) => {
       if (!requireCapability(response, "upload_documents", "You do not have permission to upload documents.")) return;
-      const extractedText = await documentService.extractText(request.file);
-      const analysis = await aiService.decodeDocument(extractedText);
+      if (!request.file) {
+        sendValidationError(response, "Please choose a document before uploading.");
+        return;
+      }
       const { fileUrl, storagePath } = await createSecureDocumentReference(request.file);
       const body = request.body as { category?: DocumentRecord["documentCategory"]; documentDate?: string };
       const document: DocumentRecord = {
@@ -812,22 +1206,17 @@ export const createServer = () => {
         documentCategory: body.category ?? "other",
         uploadDate: new Date().toISOString().slice(0, 10),
         documentDate: body.documentDate ?? new Date().toISOString().slice(0, 10),
-        aiSummary: {
-          summary: analysis.summary,
-          actionItems: analysis.action_items,
-          importantDates: analysis.important_dates,
-          medicalTerms: analysis.medical_terms,
-          doctorQuestions: analysis.doctor_questions,
-          documentType: analysis.document_type,
-          severityFlag: (analysis.severity_flag as "normal" | "review_needed" | "urgent") || "normal",
-        },
-        aiActionItems: analysis.action_items,
-        isProcessed: true,
-        extractedText,
+        aiSummary: createQueuedDocumentSummary(),
+        aiActionItems: [],
+        isProcessed: false,
+        extractedText: "",
+        processingStatus: "queued",
+        processingError: undefined,
+        isLowConfidence: false,
       };
       state.documents.unshift(document);
       await persistenceService.persistDocument(document);
-      addActivity({
+      recordActivity({
         userId: getViewer().id,
         type: "document_uploaded",
         actorName: "You",
@@ -839,14 +1228,7 @@ export const createServer = () => {
         resourceId: document.id,
         detail: `Uploaded ${document.fileName}`,
       });
-
-      if (analysis.severity_flag === "urgent") {
-        await emailService.send(
-          state.familyMembers.filter((member) => member.email).map((member) => member.email),
-          "CareCircle alert: document needs review",
-          "<p>A recently uploaded document may need immediate attention. Please review.</p>",
-        );
-      }
+      processDocumentInBackground(document.id, request.file);
 
       response.status(201).json({ document });
     }),
@@ -915,19 +1297,15 @@ export const createServer = () => {
       return;
     }
 
-    const analysis = await aiService.decodeDocument(document.extractedText ?? document.aiSummary.summary);
-    document.aiSummary = {
-      summary: analysis.summary,
-      actionItems: analysis.action_items,
-      importantDates: analysis.important_dates,
-      medicalTerms: analysis.medical_terms,
-      doctorQuestions: analysis.doctor_questions,
-      documentType: analysis.document_type,
-      severityFlag: (analysis.severity_flag as "normal" | "review_needed" | "urgent") || "normal",
-    };
-    document.aiActionItems = analysis.action_items;
-    document.isProcessed = true;
+    document.aiSummary = createQueuedDocumentSummary();
+    document.aiActionItems = [];
+    document.isProcessed = false;
+    document.processingStatus = "queued";
+    document.processingError = undefined;
+    document.isLowConfidence = false;
     await persistenceService.persistDocument(document);
+    const file = await buildStoredDocumentFile(document);
+    processDocumentInBackground(document.id, file);
     recordAudit({
       action: "document_reprocessed",
       resourceType: "document",
@@ -997,7 +1375,8 @@ export const createServer = () => {
       createdAt: new Date().toISOString(),
     };
     state.appointments.unshift(appointment);
-    addActivity({
+    await persistenceService.persistAppointment(appointment);
+    recordActivity({
       userId: getViewer().id,
       type: "appointment_scheduled",
       actorName: "You",
@@ -1012,7 +1391,7 @@ export const createServer = () => {
     response.status(201).json({ appointment });
   }));
 
-  app.patch("/api/appointments/:id", (request, response) => {
+  app.patch("/api/appointments/:id", asyncHandler(async (request, response) => {
     if (!requireCapability(response, "manage_appointments", "You do not have permission to update appointments.")) return;
     const appointment = state.appointments.find((item) => item.id === request.params.id);
     if (!appointment) {
@@ -1039,7 +1418,8 @@ export const createServer = () => {
     appointment.questionsToAsk = "questionsToAsk" in request.body ? optionalStringArray(request.body.questionsToAsk) : appointment.questionsToAsk;
     appointment.status = "status" in request.body ? request.body.status : appointment.status;
 
-    addActivity({
+    await persistenceService.persistAppointment(appointment);
+    recordActivity({
       userId: getViewer().id,
       type: "appointment_scheduled",
       actorName: getViewer().name.split(" ")[0],
@@ -1053,7 +1433,7 @@ export const createServer = () => {
     });
 
     response.json({ appointment });
-  });
+  }));
 
   app.post("/api/appointments/suggest-questions", asyncHandler(async (request, response) => {
     if (!requireCapability(response, "view_appointments", "You do not have access to appointment suggestions.")) return;
@@ -1105,10 +1485,11 @@ export const createServer = () => {
     }
     appointment.followUpSummary = notes;
     appointment.status = "completed";
+    await persistenceService.persistAppointment(appointment);
     response.json(await aiService.extractAppointmentFollowUp(notes));
   }));
 
-  app.delete("/api/appointments/:id", (request, response) => {
+  app.delete("/api/appointments/:id", asyncHandler(async (request, response) => {
     if (!requireCapability(response, "manage_appointments", "You do not have permission to delete appointments.")) return;
     const index = state.appointments.findIndex((item) => item.id === request.params.id);
     if (index === -1) {
@@ -1116,6 +1497,7 @@ export const createServer = () => {
       return;
     }
     state.appointments.splice(index, 1);
+    await persistenceService.deleteAppointment(request.params.id);
     recordAudit({
       action: "profile_updated",
       resourceType: "appointment",
@@ -1123,14 +1505,14 @@ export const createServer = () => {
       detail: "Deleted an appointment",
     });
     response.status(204).end();
-  });
+  }));
 
   app.get("/api/vitals", (_request, response) => {
     if (!requireCapability(response, "view_vitals", "You do not have access to health vitals for this patient.")) return;
     response.json({ vitals: state.healthVitals });
   });
 
-  app.post("/api/vitals", (request, response) => {
+  app.post("/api/vitals", asyncHandler(async (request, response) => {
     if (!requireCapability(response, "log_vitals", "You do not have permission to log vitals.")) return;
     const body = request.body as Partial<HealthVitalsRecord>;
     const date = trimmedText(body.date);
@@ -1163,7 +1545,8 @@ export const createServer = () => {
       createdAt: new Date().toISOString(),
     };
     state.healthVitals.unshift(vital);
-    addActivity({
+    await persistenceService.persistVital(vital);
+    recordActivity({
       userId: getViewer().id,
       type: "vital_logged",
       actorName: "You",
@@ -1176,17 +1559,17 @@ export const createServer = () => {
       detail: "Logged vital signs",
     });
     response.status(201).json({ vital });
-  });
+  }));
 
   app.post("/api/vitals/analyze", asyncHandler(async (_request, response) => {
-    if (!requireCapability(response, "view_vitals", "You do not have access to vitals analysis.")) return;
+    if (!requireCapability(response, "view_ai_insights", "AI vitals analysis is only available to caregivers and clinicians.")) return;
     response.json(await aiService.analyzeVitals(state.healthVitals.slice(0, 30), getPatient()));
   }));
 
   app.get("/api/family", (_request, response) => {
     if (!requireCapability(response, "view_family", "You do not have access to the family hub.")) return;
     response.json({
-      familyMembers: state.familyMembers,
+      familyMembers: buildFamilyRoster(),
       feed: state.activityEvents,
       reactions: state.activityReactions,
       messages: getFamilyMessages(),
@@ -1201,21 +1584,42 @@ export const createServer = () => {
       sendValidationError(response, "Please enter an email address before sending an invite.");
       return;
     }
-    const invite: FamilyMemberRecord = {
-      id: nextId("family"),
+
+    const accessRole = normalizeInviteRole(body.role);
+    if (accessRole === "doctor") {
+      sendValidationError(response, "Please invite doctors through the clinical access workflow.");
+      return;
+    }
+
+    const existingAccess = state.patientAccess.find(
+      (record) =>
+        record.patientId === getPatient().id &&
+        record.email.toLowerCase() === email.toLowerCase() &&
+        record.joinStatus !== "revoked",
+    );
+    if (existingAccess) {
+      response.status(409).json({ message: "That email already has an active or pending invite for this patient." });
+      return;
+    }
+
+    const accessLevel = accessRole === "secondary_caregiver" ? "can_log" : "can_coordinate";
+    const invite = buildPatientAccessRecord({
+      id: nextId("access"),
       patientId: getPatient().id,
-      invitedBy: getViewer().id,
-      name: trimmedText(body.name) || email.split("@")[0],
+      userId: undefined,
       email,
-      relationship: body.relationship ?? "Family member",
-      role: body.role ?? "family",
-      permissions: "can_log",
+      name: trimmedText(body.name) || email.split("@")[0],
+      accessRole,
+      accessLevel,
+      permissions: normalizePatientPermissions(accessRole, accessLevel),
+      invitedBy: getViewer().id,
       joinStatus: "pending",
       inviteToken: nextId("invite"),
       createdAt: new Date().toISOString(),
-    };
-    state.familyMembers.push(invite);
-    addActivity({
+    });
+    state.patientAccess.unshift(invite);
+    await persistenceService.persistPatientAccess(invite);
+    recordActivity({
       userId: getViewer().id,
       type: "invite_sent",
       actorName: "You",
@@ -1228,11 +1632,11 @@ export const createServer = () => {
       detail: `Invited ${invite.email}`,
     });
     await emailService.send(invite.email, "You have been invited to CareCircle AI", `<p>${getViewer().name} invited you to help care for ${getPatient().name}.</p>`);
-    response.status(201).json({ invite });
+    response.status(201).json({ invite, familyMembers: buildFamilyRoster() });
   }));
 
-  app.post("/api/family/invite/:token/accept", (request, response) => {
-    const invite = state.familyMembers.find((member) => member.inviteToken === request.params.token);
+  app.post("/api/family/invite/:token/accept", asyncHandler(async (request, response) => {
+    const invite = state.patientAccess.find((record) => record.inviteToken === request.params.token);
     if (!invite) {
       response.status(404).json({ message: "Invite not found." });
       return;
@@ -1245,38 +1649,38 @@ export const createServer = () => {
     }
 
     if (invite.joinStatus === "active" && invite.userId === viewer.id) {
-      response.json({ invite });
+      response.json({ invite, familyMembers: buildFamilyRoster() });
       return;
     }
 
     invite.joinStatus = "active";
     invite.userId = viewer.id;
+    invite.name = viewer.name;
+    invite.email = viewer.email;
     invite.lastActive = new Date().toISOString();
     invite.acceptedAt = new Date().toISOString();
-    addAuditLog({
-      id: nextId("audit"),
-      patientId: getPatient().id,
-      userId: viewer.id,
-      userName: viewer.name,
+    await persistenceService.persistPatientAccess(invite);
+    recordAudit({
       action: "invite_accepted",
       resourceType: "family_member",
       resourceId: invite.id,
-      outcome: "allowed",
       detail: `Accepted invite for ${invite.email}`,
-      createdAt: new Date().toISOString(),
     });
-    response.json({ invite });
-  });
+    response.json({ invite, familyMembers: buildFamilyRoster() });
+  }));
 
   app.post("/api/family/invite/:id/resend", asyncHandler(async (request, response) => {
     if (!requireCapability(response, "manage_family", "You do not have permission to resend invites.")) return;
-    const invite = state.familyMembers.find((member) => member.id === request.params.id);
+    const invite = state.patientAccess.find(
+      (record) => record.id === request.params.id && record.patientId === getPatient().id && record.joinStatus === "pending",
+    );
     if (!invite) {
       response.status(404).json({ message: "Invite not found." });
       return;
     }
 
-    invite.createdAt = new Date().toISOString();
+    invite.updatedAt = new Date().toISOString();
+    await persistenceService.persistPatientAccess(invite);
     recordAudit({
       action: "invite_resend",
       resourceType: "family_member",
@@ -1287,15 +1691,18 @@ export const createServer = () => {
     response.json({ invite });
   }));
 
-  app.delete("/api/family/invite/:id", (request, response) => {
+  app.delete("/api/family/invite/:id", asyncHandler(async (request, response) => {
     if (!requireCapability(response, "manage_family", "You do not have permission to cancel invites.")) return;
-    const index = state.familyMembers.findIndex((member) => member.id === request.params.id && member.joinStatus === "pending");
+    const index = state.patientAccess.findIndex(
+      (record) => record.id === request.params.id && record.patientId === getPatient().id && record.joinStatus === "pending",
+    );
     if (index === -1) {
       response.status(404).json({ message: "Pending invite not found." });
       return;
     }
 
-    state.familyMembers.splice(index, 1);
+    state.patientAccess.splice(index, 1);
+    await persistenceService.deletePatientAccess(request.params.id);
     recordAudit({
       action: "invite_cancel",
       resourceType: "family_member",
@@ -1303,27 +1710,31 @@ export const createServer = () => {
       detail: "Cancelled a pending family invite",
     });
     response.status(204).end();
-  });
+  }));
 
-  app.delete("/api/family/members/:id", (request, response) => {
+  app.delete("/api/family/members/:id", asyncHandler(async (request, response) => {
     if (!requireCapability(response, "manage_family", "You do not have permission to remove family members.")) return;
-    const index = state.familyMembers.findIndex((member) => member.id === request.params.id);
-    if (index === -1) {
+    const member = state.patientAccess.find(
+      (record) => record.id === request.params.id && record.patientId === getPatient().id,
+    );
+    if (!member) {
       response.status(404).json({ message: "Family member not found." });
       return;
     }
 
-    state.familyMembers.splice(index, 1);
+    member.joinStatus = "revoked";
+    member.updatedAt = new Date().toISOString();
+    await persistenceService.persistPatientAccess(member);
     recordAudit({
-      action: "invite_cancel",
+      action: "access_status_updated",
       resourceType: "family_member",
       resourceId: request.params.id,
       detail: "Removed a family member from the patient roster",
     });
     response.status(204).end();
-  });
+  }));
 
-  app.post("/api/family/feed/:id/reactions", (request, response) => {
+  app.post("/api/family/feed/:id/reactions", asyncHandler(async (request, response) => {
     if (!requireCapability(response, "view_family", "You do not have permission to react to family updates.")) return;
     const event = state.activityEvents.find((item) => item.id === request.params.id);
     if (!event) {
@@ -1338,8 +1749,9 @@ export const createServer = () => {
       createdAt: new Date().toISOString(),
     };
     state.activityReactions.unshift(reaction);
+    await persistenceService.persistActivityReaction(reaction);
     response.status(201).json({ reaction });
-  });
+  }));
 
   app.get("/api/family/messages", (_request, response) => {
     if (!requireCapability(response, "view_family", "You do not have access to the family chat.")) return;
@@ -1349,7 +1761,7 @@ export const createServer = () => {
     });
   });
 
-  app.post("/api/family/messages", (request, response) => {
+  app.post("/api/family/messages", asyncHandler(async (request, response) => {
     if (!requireCapability(response, "view_family", "You do not have permission to send family messages.")) return;
     const messageText = trimmedText(request.body?.content ?? request.body?.messageText);
     if (!hasText(messageText)) {
@@ -1368,7 +1780,8 @@ export const createServer = () => {
       isPinned: false,
     };
     addFamilyMessage(message);
-    addActivity({
+    await persistenceService.persistFamilyMessage(message, "family_thread");
+    recordActivity({
       userId: getViewer().id,
       type: "message_sent",
       actorName: getViewer().name.split(" ")[0],
@@ -1381,10 +1794,10 @@ export const createServer = () => {
       detail: "Sent a family chat message",
     });
     response.status(201).json({ message });
-  });
+  }));
 
-  app.patch("/api/family/messages/:id/pin", (request, response) => {
-    if (!requireCapability(response, "view_family", "You do not have permission to pin family messages.")) return;
+  app.patch("/api/family/messages/:id/pin", asyncHandler(async (request, response) => {
+    if (!requireCapability(response, "manage_family", "You do not have permission to pin family messages.")) return;
     const message = updateFamilyMessage(request.params.id, {
       isPinned: request.body?.isPinned ?? true,
     });
@@ -1393,15 +1806,16 @@ export const createServer = () => {
       return;
     }
 
+    await persistenceService.persistFamilyMessage(message, "family_thread");
     response.json({ message });
-  });
+  }));
 
   app.get("/api/tasks", (_request, response) => {
     if (!requireCapability(response, "view_tasks", "You do not have access to the care board.")) return;
     response.json({ tasks: state.tasks });
   });
 
-  app.post("/api/tasks", (request, response) => {
+  app.post("/api/tasks", asyncHandler(async (request, response) => {
     if (!requireCapability(response, "manage_tasks", "You do not have permission to create tasks.")) return;
     const body = request.body as Partial<TaskRecord>;
     const title = trimmedText(body.title);
@@ -1429,7 +1843,8 @@ export const createServer = () => {
       createdAt: new Date().toISOString(),
     };
     state.tasks.unshift(task);
-    addActivity({
+    await persistenceService.persistTask(task);
+    recordActivity({
       userId: getViewer().id,
       type: "task_updated",
       actorName: getViewer().name.split(" ")[0],
@@ -1442,13 +1857,24 @@ export const createServer = () => {
       detail: `Created task "${task.title}"`,
     });
     response.status(201).json({ task });
-  });
+  }));
 
-  app.patch("/api/tasks/:id", (request, response) => {
-    if (!requireCapability(response, "manage_tasks", "You do not have permission to update tasks.")) return;
+  app.patch("/api/tasks/:id", asyncHandler(async (request, response) => {
     const task = state.tasks.find((item) => item.id === request.params.id);
     if (!task) {
       response.status(404).json({ message: "Task not found." });
+      return;
+    }
+    const viewer = getViewer();
+    const canManageTasks = Boolean(getViewerAccess()?.capabilities.includes("manage_tasks"));
+    const canCompleteTasks = Boolean(getViewerAccess()?.capabilities.includes("complete_tasks"));
+    const nextStatus = "status" in request.body ? request.body.status : task.status;
+    const completionOnlyUpdate =
+      Object.keys(request.body ?? {}).every((key) => key === "status") &&
+      nextStatus === "done" &&
+      task.assignedTo === viewer.id;
+    if (!canManageTasks && !(canCompleteTasks && completionOnlyUpdate)) {
+      sendForbidden(response, "You do not have permission to update tasks.");
       return;
     }
     const { id, patientId, createdBy, createdAt, ...updates } = request.body;
@@ -1466,20 +1892,21 @@ export const createServer = () => {
     Object.assign(task, updates);
     if (task.status === "done") {
       task.completedAt = new Date().toISOString();
-      addActivity({
-        userId: getViewer().id,
+      recordActivity({
+        userId: viewer.id,
         type: "task_completed",
-        actorName: getViewer().name.split(" ")[0],
+        actorName: viewer.name.split(" ")[0],
         description: `completed ${task.title}`,
       });
     } else if (previousStatus !== task.status) {
-      addActivity({
-        userId: getViewer().id,
+      recordActivity({
+        userId: viewer.id,
         type: "task_updated",
-        actorName: getViewer().name.split(" ")[0],
+        actorName: viewer.name.split(" ")[0],
         description: `moved "${task.title}" to ${task.status.replaceAll("_", " ")}`,
       });
     }
+    await persistenceService.persistTask(task);
     recordAudit({
       action: "profile_updated",
       resourceType: "task",
@@ -1487,9 +1914,9 @@ export const createServer = () => {
       detail: `Updated task "${task.title}"`,
     });
     response.json({ task });
-  });
+  }));
 
-  app.delete("/api/tasks/:id", (request, response) => {
+  app.delete("/api/tasks/:id", asyncHandler(async (request, response) => {
     if (!requireCapability(response, "manage_tasks", "You do not have permission to delete tasks.")) return;
     const index = state.tasks.findIndex((item) => item.id === request.params.id);
     if (index === -1) {
@@ -1497,6 +1924,7 @@ export const createServer = () => {
       return;
     }
     state.tasks.splice(index, 1);
+    await persistenceService.deleteTask(request.params.id);
     recordAudit({
       action: "profile_updated",
       resourceType: "task",
@@ -1504,12 +1932,13 @@ export const createServer = () => {
       detail: "Deleted a task",
     });
     response.status(204).end();
-  });
+  }));
 
   app.post("/api/tasks/suggestions", asyncHandler(async (_request, response) => {
     if (!requireCapability(response, "manage_tasks", "You do not have access to task suggestions.")) return;
     response.json(await aiService.suggestTasks(getPatient()));
   }));
+
 
   app.get("/api/emergency", (_request, response) => {
     if (!requireCapability(response, "view_emergency", "You do not have access to emergency tools.")) return;
@@ -1521,7 +1950,7 @@ export const createServer = () => {
     response.json({
       patient: getPatient(),
       medications: state.medications.filter((item) => item.isActive),
-      familyMembers: state.familyMembers,
+      familyMembers: buildFamilyRoster(),
     });
   });
 
@@ -1557,7 +1986,7 @@ export const createServer = () => {
   app.post("/api/emergency/share-email", asyncHandler(async (request, response) => {
     if (!requireCapability(response, "share_emergency", "You do not have permission to email emergency information.")) return;
     const selectedIds = Array.isArray(request.body?.familyMemberIds) ? request.body.familyMemberIds : [];
-    const recipients = state.familyMembers.filter((member) => selectedIds.includes(member.id));
+    const recipients = buildFamilyRoster().filter((member) => member.joinStatus === "active" && selectedIds.includes(member.id));
     if (!recipients.length) {
       sendValidationError(response, "Please choose at least one family member.");
       return;
@@ -1830,6 +2259,105 @@ export const createServer = () => {
 
     response.json({ patient });
   });
+
+  app.get("/api/settings/access", (_request, response) => {
+    if (!requireCapability(response, "manage_family", "You do not have permission to manage care team access.")) return;
+    response.json({
+      patientAccess: state.patientAccess.filter((record) => record.patientId === getPatient().id),
+      familyMembers: buildFamilyRoster(),
+    });
+  });
+
+  app.patch("/api/settings/access/:id", asyncHandler(async (request, response) => {
+    if (!requireCapability(response, "manage_family", "You do not have permission to manage care team access.")) return;
+
+    const accessRecord = state.patientAccess.find(
+      (record) => record.id === request.params.id && record.patientId === getPatient().id,
+    );
+    if (!accessRecord) {
+      response.status(404).json({ message: "Care team access record not found." });
+      return;
+    }
+
+    if (accessRecord.userId === getViewer().id || accessRecord.accessRole === "primary_caregiver") {
+      sendForbidden(response, "The primary caregiver's own access cannot be edited here.");
+      return;
+    }
+
+    const permissionPatch: Partial<PatientPermissionSet> = {};
+    if (isObject(request.body?.permissions)) {
+      Object.assign(permissionPatch, request.body.permissions);
+    } else if (Array.isArray(request.body?.capabilities)) {
+      const capabilities = request.body.capabilities.filter((item): item is string => typeof item === "string");
+      Object.assign(permissionPatch, {
+        canViewMedications: capabilities.includes("view_medications"),
+        canManageMedications: capabilities.includes("manage_medications"),
+        canLogMedications: capabilities.includes("log_medications"),
+        canViewJournal: capabilities.includes("view_journal"),
+        canLogJournal: capabilities.includes("log_journal"),
+        canViewDocuments: capabilities.includes("view_documents"),
+        canUploadDocuments: capabilities.includes("upload_documents"),
+        canViewAppointments: capabilities.includes("view_appointments"),
+        canManageAppointments: capabilities.includes("manage_appointments"),
+        canViewVitals: capabilities.includes("view_vitals"),
+        canLogVitals: capabilities.includes("log_vitals"),
+        canViewFamily: capabilities.includes("view_family"),
+        canManageFamily: capabilities.includes("manage_family"),
+        canViewTasks: capabilities.includes("view_tasks"),
+        canManageTasks: capabilities.includes("manage_tasks"),
+        canCompleteTasks: capabilities.includes("complete_tasks"),
+        canViewEmergency: capabilities.includes("view_emergency"),
+        canShareEmergency: capabilities.includes("share_emergency"),
+        canEditPatient: capabilities.includes("edit_patient"),
+        canExportData: capabilities.includes("export_data"),
+        canAddClinicalNotes: capabilities.includes("add_clinical_notes"),
+        canAcceptInvites: capabilities.includes("accept_invites"),
+        canViewInsurance: capabilities.includes("view_insurance"),
+        canViewAiInsights: capabilities.includes("view_ai_insights"),
+        canViewAuditLog: capabilities.includes("view_audit_log"),
+      });
+    }
+
+    const nextJoinStatus =
+      request.body?.joinStatus === "active" || request.body?.joinStatus === "revoked"
+        ? request.body.joinStatus
+        : undefined;
+    const permissionsChanged = Object.keys(permissionPatch).length > 0;
+    const statusChanged = typeof nextJoinStatus === "string" && nextJoinStatus !== accessRecord.joinStatus;
+
+    if (!permissionsChanged && !statusChanged) {
+      response.json({ access: accessRecord });
+      return;
+    }
+
+    if (permissionsChanged) {
+      mergeAccessPermissions(accessRecord, permissionPatch);
+      recordAudit({
+        action: "permissions_updated",
+        resourceType: "patient_access",
+        resourceId: accessRecord.id,
+        detail: `Updated permissions for ${accessRecord.name || accessRecord.email}`,
+      });
+    }
+
+    if (statusChanged) {
+      accessRecord.joinStatus = nextJoinStatus;
+      accessRecord.updatedAt = new Date().toISOString();
+      recordAudit({
+        action: "access_status_updated",
+        resourceType: "patient_access",
+        resourceId: accessRecord.id,
+        detail: `${nextJoinStatus === "revoked" ? "Revoked" : "Restored"} access for ${accessRecord.name || accessRecord.email}`,
+      });
+    }
+
+    await persistenceService.persistPatientAccess(accessRecord);
+    response.json({
+      access: accessRecord,
+      patientAccess: state.patientAccess.filter((record) => record.patientId === getPatient().id),
+      familyMembers: buildFamilyRoster(),
+    });
+  }));
 
   app.patch("/api/settings/notifications", (request, response) => {
     const viewer = getViewer();

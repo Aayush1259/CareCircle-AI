@@ -4,13 +4,13 @@ import { Chrome, HeartHandshake, LockKeyhole, Mail } from "lucide-react";
 import toast from "react-hot-toast";
 import { Button, Card, Field, Input } from "@/components/ui";
 import { useAppData } from "@/context/AppDataContext";
-import { roleHomePath } from "@/lib/roles";
+import { resolveViewerRole, roleHomePath } from "@/lib/roles";
 import { hasBrowserSupabaseAuth } from "@/lib/supabaseBrowser";
 
 export const LoginPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { login, loading, startGoogleAuth } = useAppData();
+  const { login, loading, startGoogleAuth, appConfig } = useAppData();
   const [email, setEmail] = useState("demo@carecircle.ai");
   const [password, setPassword] = useState("Demo1234");
   const inviteToken = searchParams.get("inviteToken");
@@ -24,7 +24,7 @@ export const LoginPage = () => {
         navigate(`/invite/${inviteToken}`, { replace: true });
         return;
       }
-      navigate(roleHomePath(session.viewer.role), { replace: true });
+      navigate(roleHomePath(resolveViewerRole(session.viewer.role, session.access?.accessRole)), { replace: true });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Please try again.");
     }
@@ -102,7 +102,7 @@ export const LoginPage = () => {
               </Button>
             </form>
 
-            {hasBrowserSupabaseAuth ? (
+            {hasBrowserSupabaseAuth && appConfig.googleAuthEnabled ? (
               <>
                 <div className="my-5 flex items-center gap-3 text-sm text-textSecondary">
                   <div className="h-px flex-1 bg-borderColor" />

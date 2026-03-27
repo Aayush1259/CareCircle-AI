@@ -118,13 +118,14 @@ export const aiService = {
       "Analyze the medical document text and return JSON with summary, action_items, important_dates, medical_terms, doctor_questions, document_type, severity_flag.",
       text,
       {
-        summary: "This document has been translated into plain language for the caregiver.",
-        action_items: ["Review the highlighted dates and bring the document to the next appointment if it feels important."],
-        important_dates: [{ date: new Date().toISOString().slice(0, 10), description: "Review date" }],
-        medical_terms: [{ term: "A1C", plainEnglish: "A longer-term picture of blood sugar." }],
-        doctor_questions: ["Is there anything in this document we should act on this week?"],
-        document_type: "medical record",
-        severity_flag: "review_needed",
+        summary:
+          "CareCircle could not create a reliable AI summary from this document yet. Please review the original file directly.",
+        action_items: ["Open the original document and share it with the care team if anything looks urgent or unclear."],
+        important_dates: [],
+        medical_terms: [],
+        doctor_questions: ["Is there anything in this document you want us to review together at the next appointment?"],
+        document_type: "uploaded document",
+        severity_flag: "normal",
       },
     );
   },

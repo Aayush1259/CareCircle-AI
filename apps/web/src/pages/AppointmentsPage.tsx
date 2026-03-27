@@ -229,12 +229,12 @@ export const AppointmentsPage = () => {
 
   const relevantJournal = prepTarget
     ? bootstrap.data.careJournal
-        .filter((entry) => {
-          const specialty = prepTarget.specialty.toLowerCase();
-          const relevantTags = specialtyTags[specialty] ?? specialtyTags.primary;
-          return entry.tags.some((tag) => relevantTags.includes(tag.toLowerCase()));
-        })
-        .slice(0, 3)
+      .filter((entry) => {
+        const specialty = prepTarget.specialty.toLowerCase();
+        const relevantTags = specialtyTags[specialty] ?? specialtyTags.primary;
+        return entry.tags.some((tag) => relevantTags.includes(tag.toLowerCase()));
+      })
+      .slice(0, 3)
     : [];
 
   return (
@@ -267,9 +267,8 @@ export const AppointmentsPage = () => {
             <button
               key={day.iso}
               type="button"
-              className={`min-h-[92px] rounded-2xl border p-3 text-left transition ${
-                day.iso === selectedDate ? "border-brand bg-brandSoft" : "border-borderColor bg-white"
-              } ${day.isCurrentMonth ? "" : "opacity-45"} ${day.isToday ? "ring-2 ring-brand/40" : ""}`}
+              className={`min-h-[92px] rounded-2xl border p-3 text-left transition ${day.iso === selectedDate ? "border-brand bg-brandSoft" : "border-borderColor bg-white"
+                } ${day.isCurrentMonth ? "" : "opacity-45"} ${day.isToday ? "ring-2 ring-brand/40" : ""}`}
               onClick={() => setSelectedDate(day.iso)}
             >
               <div className="flex items-center justify-between gap-2">

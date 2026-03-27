@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
-import { Search, Sparkles } from "lucide-react";
+import { Lock, Search, Sparkles } from "lucide-react";
 import toast from "react-hot-toast";
 import type { CareJournalRecord } from "@carecircle/shared";
 import { Badge, Button, Card, Field, Input, Modal, SectionHeader, Select, Textarea, Toggle } from "@/components/ui";
 import { useAppData } from "@/context/AppDataContext";
 import { formatDate, relativeTime } from "@/lib/format";
+import { resolveViewerRole } from "@/lib/roles";
 import { hasText, trimmedText } from "@/lib/validation";
 
 const severityTone = {
@@ -40,6 +41,17 @@ export const JournalPage = () => {
   });
 
   if (!bootstrap) return null;
+
+  const viewerRole = resolveViewerRole(bootstrap.viewer.role, bootstrap.viewerAccess?.accessRole);
+  const capabilities =
+    bootstrap.capabilities ??
+    (viewerRole === "family_member"
+      ? ["view_journal"]
+      : viewerRole === "doctor"
+        ? ["view_journal", "view_ai_insights"]
+        : ["log_journal", "view_ai_insights"]);
+  const canLogJournal = capabilities.includes("log_journal");
+  const canViewAiInsights = capabilities.includes("view_ai_insights");
 
   const entries = useMemo(() => {
     return bootstrap.data.careJournal.filter((entry) => {
@@ -130,8 +142,14 @@ export const JournalPage = () => {
       <Card className="h-fit">
         <SectionHeader
           title="Care journal"
-          description="Search, filter, and find what changed."
-          action={<Button onClick={() => setModalOpen(true)}>New entry</Button>}
+          description={
+            viewerRole === "family_member"
+              ? "Shared notes and your own entries, without the clinician-only AI tools."
+              : viewerRole === "doctor"
+                ? "Review what caregivers have shared and add context when needed."
+                : "Search, filter, and find what changed."
+          }
+          action={canLogJournal ? <Button onClick={() => setModalOpen(true)}>New entry</Button> : undefined}
         />
         <div className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,180px)]">
@@ -176,12 +194,12 @@ export const JournalPage = () => {
             <SectionHeader
               title={selectedEntry.entryTitle}
               description={`${formatDate(selectedEntry.date)} at ${selectedEntry.time} | ${relativeTime(selectedEntry.createdAt)}`}
-              action={
+              action={canViewAiInsights ? (
                 <Button variant="secondary" onClick={() => analyzeEntry(selectedEntry)}>
                   <Sparkles className="h-4 w-4" />
                   AI analysis
                 </Button>
-              }
+              ) : undefined}
             />
             <div className="space-y-4">
               <p className="text-base text-textPrimary">{selectedEntry.entryBody}</p>
@@ -201,6 +219,9 @@ export const JournalPage = () => {
               {selectedEntry.aiAnalysis ? (
                 <div className="rounded-3xl bg-brandSoft p-5">
                   <p className="text-sm font-semibold uppercase tracking-[0.18em] text-brandDark">AI analysis</p>
+                  <p className="mt-2 text-xs font-semibold uppercase tracking-[0.14em] text-brandDark/80">
+                    AI-generated | Not a medical diagnosis | Consult your doctor
+                  </p>
                   <p className="mt-3 text-base text-textPrimary">{selectedEntry.aiAnalysis.summary}</p>
                   <div className="mt-4 grid gap-3 lg:grid-cols-3">
                     <div>
@@ -237,10 +258,14 @@ export const JournalPage = () => {
         <Card>
           <SectionHeader
             title="30-day pattern analysis"
-            description="Let CareCircle scan recent notes for trends, concerns, and bright spots."
-            action={<Button onClick={analyzePatterns}>Analyze last 30 days</Button>}
+            description={
+              canViewAiInsights
+                ? "Let CareCircle scan recent notes for trends, concerns, and bright spots."
+                : "AI pattern analysis is reserved for caregivers and clinicians."
+            }
+            action={canViewAiInsights ? <Button onClick={analyzePatterns}>Analyze last 30 days</Button> : undefined}
           />
-          {patternReport ? (
+          {canViewAiInsights && patternReport ? (
             <div className="grid gap-4 md:grid-cols-2">
               <div className="rounded-3xl bg-slate-50 p-4">
                 <p className="font-semibold text-textPrimary">Patterns</p>
@@ -275,15 +300,25 @@ export const JournalPage = () => {
                 </ul>
               </div>
             </div>
-          ) : (
+          ) : canViewAiInsights ? (
             <div className="rounded-3xl border border-dashed border-borderColor p-8 text-center text-textSecondary">
               Tap "Analyze last 30 days" to see patterns in plain language.
+            </div>
+          ) : (
+            <div className="flex items-start gap-3 rounded-3xl border border-amber-200 bg-amber-50 p-6 text-amber-900">
+              <Lock className="mt-1 h-5 w-5" />
+              <div>
+                <p className="font-semibold">AI note analysis is hidden in this role.</p>
+                <p className="mt-1 text-sm text-amber-900/80">
+                  Family accounts can still read shared notes, but pattern analysis stays with caregivers and clinicians.
+                </p>
+              </div>
             </div>
           )}
         </Card>
       </div>
 
-      <Modal open={modalOpen} title="New care journal entry" onClose={() => setModalOpen(false)}>
+      <Modal open={modalOpen && canLogJournal} title="New care journal entry" onClose={() => setModalOpen(false)}>
         <form
           className="grid gap-4"
           onSubmit={(event) => {

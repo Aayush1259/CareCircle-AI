@@ -18,7 +18,7 @@ export const googleAuthContextStorageKey = "carecircle_google_auth_context";
 
 export interface GoogleAuthContext {
   mode: "login" | "signup";
-  role?: "caregiver" | "family_member" | "doctor";
+  role?: "primary_caregiver" | "secondary_caregiver" | "family_member" | "doctor" | "caregiver";
   licenseNumber?: string;
   name?: string;
   inviteToken?: string;

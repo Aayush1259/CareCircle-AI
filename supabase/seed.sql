@@ -15,12 +15,12 @@ values
 on conflict (id) do nothing;
 
 insert into patients (
-  id, user_id, name, preferred_name, date_of_birth, primary_diagnosis, secondary_conditions,
+  id, user_id, owner_id, name, preferred_name, date_of_birth, primary_diagnosis, secondary_conditions,
   primary_doctor_name, primary_doctor_phone, hospital_preference, insurance_provider, insurance_id,
   blood_type, allergies, mobility_level
 )
 values (
-  'patient_ellie', 'user_sarah', 'Eleanor "Ellie" Martinez', 'Ellie', '1948-04-18', 'Type 2 Diabetes',
+  'patient_ellie', 'user_sarah', 'user_sarah', 'Eleanor "Ellie" Martinez', 'Ellie', '1948-04-18', 'Type 2 Diabetes',
   array['Hypertension', 'Early-stage Alzheimer''s', 'Arthritis'],
   'Dr. Robert Chen', '(555) 234-5678', 'Riverside Medical Center', 'UnitedHealthcare', 'UHC-7823941',
   'A+', array['Penicillin', 'Sulfa drugs'], 'Uses a cane for longer distances'
@@ -42,12 +42,12 @@ on conflict (id) do nothing;
 
 insert into medication_logs (id, medication_id, patient_id, scheduled_time, taken_at, status, notes, logged_by)
 values
-  ('log_001', 'med_metformin', 'patient_ellie', date_trunc('day', now()) + interval '8 hours', date_trunc('day', now()) + interval '8 hours 10 minutes', 'taken', 'Taken with breakfast.', 'Sarah Martinez'),
-  ('log_002', 'med_lisinopril', 'patient_ellie', date_trunc('day', now()) + interval '8 hours', date_trunc('day', now()) + interval '8 hours 12 minutes', 'taken', 'Taken with breakfast.', 'Sarah Martinez'),
-  ('log_003', 'med_aspirin', 'patient_ellie', date_trunc('day', now()) + interval '8 hours', date_trunc('day', now()) + interval '8 hours 14 minutes', 'taken', 'Taken with breakfast.', 'Sarah Martinez'),
-  ('log_004', 'med_vitd', 'patient_ellie', date_trunc('day', now()) + interval '8 hours', date_trunc('day', now()) + interval '8 hours 15 minutes', 'taken', 'Taken with breakfast.', 'Sarah Martinez'),
-  ('log_005', 'med_metformin', 'patient_ellie', date_trunc('day', now()) + interval '18 hours', null, 'missed', 'Dose missed after an early bedtime.', 'James Martinez'),
-  ('log_006', 'med_donepezil', 'patient_ellie', date_trunc('day', now()) + interval '21 hours', null, 'missed', 'Dose not logged yet.', 'James Martinez')
+  ('log_001', 'med_metformin', 'patient_ellie', date_trunc('day', now()) + interval '8 hours', date_trunc('day', now()) + interval '8 hours 10 minutes', 'taken', 'Taken with breakfast.', 'user_sarah'),
+  ('log_002', 'med_lisinopril', 'patient_ellie', date_trunc('day', now()) + interval '8 hours', date_trunc('day', now()) + interval '8 hours 12 minutes', 'taken', 'Taken with breakfast.', 'user_sarah'),
+  ('log_003', 'med_aspirin', 'patient_ellie', date_trunc('day', now()) + interval '8 hours', date_trunc('day', now()) + interval '8 hours 14 minutes', 'taken', 'Taken with breakfast.', 'user_sarah'),
+  ('log_004', 'med_vitd', 'patient_ellie', date_trunc('day', now()) + interval '8 hours', date_trunc('day', now()) + interval '8 hours 15 minutes', 'taken', 'Taken with breakfast.', 'user_sarah'),
+  ('log_005', 'med_metformin', 'patient_ellie', date_trunc('day', now()) + interval '18 hours', null, 'missed', 'Dose missed after an early bedtime.', 'user_james'),
+  ('log_006', 'med_donepezil', 'patient_ellie', date_trunc('day', now()) + interval '21 hours', null, 'missed', 'Dose not logged yet.', 'user_james')
 on conflict (id) do nothing;
 
 insert into care_journal (id, patient_id, user_id, date, time, entry_title, entry_body, mood, pain_level, tags, severity, follow_up_needed, follow_up_note, created_at)
@@ -81,12 +81,64 @@ values
   ('appointment_002', 'patient_ellie', 'user_sarah', 'Dr. Hannah Scott', 'Neurologist', 'Neurology Partners', current_date + 21, '14:00', 50, '98 Willow Street, Riverside, CA', '(555) 900-2222', 'Memory follow-up and evening confusion review', array['Are there new strategies for sundowning?', 'Should we adjust Donepezil timing?'], 'upcoming', false)
 on conflict (id) do nothing;
 
-insert into family_members (id, patient_id, invited_by, user_id, name, email, phone, relationship, role, permissions, join_status, invite_token, last_active)
+insert into patient_access (
+  id, patient_id, user_id, member_role, permissions, invite_email, invite_token, invited_by,
+  join_status, joined_at, invite_sent_at, created_at, updated_at
+)
 values
-  ('family_001', 'patient_ellie', 'user_sarah', 'user_sarah', 'Sarah', 'demo@carecircle.ai', '(555) 111-2233', 'Daughter', 'primary_caregiver', 'full_access', 'active', 'invite_001', now()),
-  ('family_002', 'patient_ellie', 'user_sarah', 'user_james', 'James', 'james@carecircle.ai', '(555) 333-8899', 'Son', 'secondary_caregiver', 'can_log', 'active', 'invite_002', now() - interval '1 day'),
-  ('family_003', 'patient_ellie', 'user_sarah', 'user_maria', 'Maria', 'maria@carecircle.ai', '(555) 777-4455', 'Home health aide', 'family', 'can_log', 'active', 'invite_003', now() - interval '1 day')
-on conflict (id) do nothing;
+  (
+    'access_001',
+    'patient_ellie',
+    'user_sarah',
+    'primary_caregiver',
+    public.default_access_permissions('primary_caregiver', 'full_access'),
+    'demo@carecircle.ai',
+    'invite_001',
+    'user_sarah',
+    'active',
+    now() - interval '90 days',
+    now() - interval '90 days',
+    now() - interval '90 days',
+    now() - interval '1 day'
+  ),
+  (
+    'access_002',
+    'patient_ellie',
+    'user_james',
+    'secondary_caregiver',
+    public.default_access_permissions('secondary_caregiver', 'can_log'),
+    'james@carecircle.ai',
+    'invite_002',
+    'user_sarah',
+    'active',
+    now() - interval '70 days',
+    now() - interval '70 days',
+    now() - interval '70 days',
+    now() - interval '1 day'
+  ),
+  (
+    'access_003',
+    'patient_ellie',
+    'user_maria',
+    'family_member',
+    public.default_access_permissions('family_member', 'can_log'),
+    'maria@carecircle.ai',
+    'invite_003',
+    'user_sarah',
+    'active',
+    now() - interval '55 days',
+    now() - interval '55 days',
+    now() - interval '55 days',
+    now() - interval '1 day'
+  )
+on conflict (patient_id, user_id) do update
+set
+  member_role = excluded.member_role,
+  permissions = excluded.permissions,
+  invite_email = excluded.invite_email,
+  join_status = excluded.join_status,
+  joined_at = excluded.joined_at,
+  updated_at = excluded.updated_at;
 
 insert into tasks (id, patient_id, created_by, assigned_to, title, description, category, priority, due_date, due_time, recurrence, status, ai_suggested)
 values

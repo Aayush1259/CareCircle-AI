@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
@@ -19,64 +19,51 @@ import {
   X,
 } from "lucide-react";
 import toast from "react-hot-toast";
-import type { UserRole } from "@carecircle/shared";
+import type { PatientCapability, UserRole } from "@carecircle/shared";
 import { calcAge, relativeTime, sentenceCase } from "@/lib/format";
 import { useAppData } from "@/context/AppDataContext";
-import { roleAllowedPaths, roleHomePath, roleLabel } from "@/lib/roles";
+import { resolveViewerRole, roleAllowedPaths, roleHomePath, roleLabel } from "@/lib/roles";
 import { Badge, Button, Modal, cn } from "./ui";
 import { CareChatAssistant } from "./CareChatAssistant";
 
-const caregiverNavigation = [
-  { to: "/dashboard", label: "Dashboard", icon: Home },
-  { to: "/medications", label: "Medications", icon: Pill },
-  { to: "/journal", label: "Care Journal", icon: BookHeart },
-  { to: "/documents", label: "Documents", icon: FileText },
-  { to: "/appointments", label: "Appointments", icon: CalendarDays },
-  { to: "/vitals", label: "Health Vitals", icon: HeartPulse },
-  { to: "/family", label: "Family Hub", icon: Users },
-  { to: "/tasks", label: "Tasks", icon: ClipboardCheck },
-  { to: "/emergency", label: "Emergency", icon: ShieldAlert },
-];
+interface NavigationItem {
+  to: string;
+  label: string;
+  icon: typeof Home;
+  shortLabel?: string;
+  requiredCapability?: PatientCapability;
+}
 
-const familyNavigation = [
-  { to: "/family-home", label: "Home", icon: Home },
-  { to: "/medications", label: "Medications", icon: Pill },
-  { to: "/tasks", label: "Tasks", icon: ClipboardCheck },
-  { to: "/family", label: "Family Chat", icon: Users },
-  { to: "/emergency", label: "Emergency", icon: ShieldAlert },
-];
-
-const doctorNavigation = [
-  { to: "/doctor-home", label: "Home", icon: Home },
-  { to: "/journal", label: "Care Journal", icon: BookHeart },
-  { to: "/documents", label: "Documents", icon: FileText },
-  { to: "/vitals", label: "Health Vitals", icon: HeartPulse },
-  { to: "/appointments", label: "Appointments", icon: CalendarDays },
-  { to: "/emergency", label: "Emergency", icon: ShieldAlert },
-];
-
-const caregiverMobileTabs = [
+const caregiverNavigation: NavigationItem[] = [
   { to: "/dashboard", label: "Dashboard", shortLabel: "Home", icon: Home },
-  { to: "/medications", label: "Medications", shortLabel: "Meds", icon: Pill },
-  { to: "/journal", label: "Care Journal", shortLabel: "Journal", icon: BookHeart },
-  { to: "/family", label: "Family Hub", shortLabel: "Family", icon: Users },
-  { to: "/emergency", label: "Emergency", shortLabel: "SOS", icon: ShieldAlert },
+  { to: "/medications", label: "Medications", shortLabel: "Meds", icon: Pill, requiredCapability: "view_medications" },
+  { to: "/journal", label: "Care Journal", shortLabel: "Journal", icon: BookHeart, requiredCapability: "view_journal" },
+  { to: "/documents", label: "Documents", shortLabel: "Docs", icon: FileText, requiredCapability: "view_documents" },
+  { to: "/appointments", label: "Appointments", shortLabel: "Appts", icon: CalendarDays, requiredCapability: "view_appointments" },
+  { to: "/vitals", label: "Health Vitals", shortLabel: "Vitals", icon: HeartPulse, requiredCapability: "view_vitals" },
+  { to: "/family", label: "Family Hub", shortLabel: "Family", icon: Users, requiredCapability: "view_family" },
+  { to: "/tasks", label: "Tasks", shortLabel: "Tasks", icon: ClipboardCheck, requiredCapability: "view_tasks" },
+  { to: "/emergency", label: "Emergency", shortLabel: "SOS", icon: ShieldAlert, requiredCapability: "view_emergency" },
 ];
 
-const familyMobileTabs = [
+const familyNavigation: NavigationItem[] = [
   { to: "/family-home", label: "Home", shortLabel: "Home", icon: Home },
-  { to: "/medications", label: "Medications", shortLabel: "Meds", icon: Pill },
-  { to: "/tasks", label: "Tasks", shortLabel: "Tasks", icon: ClipboardCheck },
-  { to: "/family", label: "Family Chat", shortLabel: "Family", icon: Users },
-  { to: "/emergency", label: "Emergency", shortLabel: "SOS", icon: ShieldAlert },
+  { to: "/medications", label: "Medications", shortLabel: "Meds", icon: Pill, requiredCapability: "view_medications" },
+  { to: "/tasks", label: "My Tasks", shortLabel: "Tasks", icon: ClipboardCheck, requiredCapability: "view_tasks" },
+  { to: "/family", label: "Family Chat", shortLabel: "Family", icon: Users, requiredCapability: "view_family" },
+  { to: "/appointments", label: "Appointments", shortLabel: "Appts", icon: CalendarDays, requiredCapability: "view_appointments" },
+  { to: "/journal", label: "Care Journal", shortLabel: "Journal", icon: BookHeart, requiredCapability: "view_journal" },
+  { to: "/vitals", label: "Health Vitals", shortLabel: "Vitals", icon: HeartPulse, requiredCapability: "view_vitals" },
+  { to: "/emergency", label: "Emergency", shortLabel: "SOS", icon: ShieldAlert, requiredCapability: "view_emergency" },
 ];
 
-const doctorMobileTabs = [
+const doctorNavigation: NavigationItem[] = [
   { to: "/doctor-home", label: "Home", shortLabel: "Home", icon: Home },
-  { to: "/journal", label: "Care Journal", shortLabel: "Journal", icon: BookHeart },
-  { to: "/vitals", label: "Health Vitals", shortLabel: "Vitals", icon: HeartPulse },
-  { to: "/appointments", label: "Appointments", shortLabel: "Appts", icon: CalendarDays },
-  { to: "/emergency", label: "Emergency", shortLabel: "SOS", icon: ShieldAlert },
+  { to: "/journal", label: "Care Journal", shortLabel: "Journal", icon: BookHeart, requiredCapability: "view_journal" },
+  { to: "/documents", label: "Medical Documents", shortLabel: "Docs", icon: FileText, requiredCapability: "view_documents" },
+  { to: "/vitals", label: "Health Vitals", shortLabel: "Vitals", icon: HeartPulse, requiredCapability: "view_vitals" },
+  { to: "/appointments", label: "My Appointments", shortLabel: "Appts", icon: CalendarDays, requiredCapability: "view_appointments" },
+  { to: "/emergency", label: "Emergency", shortLabel: "SOS", icon: ShieldAlert, requiredCapability: "view_emergency" },
 ];
 
 export const AppShell = () => {
@@ -91,10 +78,26 @@ export const AppShell = () => {
   const [notificationsSaving, setNotificationsSaving] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
-  const viewerRole = (bootstrap?.viewer.role ?? "caregiver") as UserRole;
-  const navigation = viewerRole === "family_member" ? familyNavigation : viewerRole === "doctor" ? doctorNavigation : caregiverNavigation;
-  const mobilePrimaryTabs = viewerRole === "family_member" ? familyMobileTabs : viewerRole === "doctor" ? doctorMobileTabs : caregiverMobileTabs;
-  const allowedPaths = useMemo(() => roleAllowedPaths(viewerRole), [viewerRole]);
+  const viewerRole = resolveViewerRole(
+    bootstrap?.viewer.role ?? "caregiver",
+    bootstrap?.viewerAccess?.accessRole,
+  ) as UserRole;
+  const capabilities = bootstrap?.capabilities ?? [];
+  const hasCapability = useCallback(
+    (capability?: PatientCapability) => !capability || capabilities.includes(capability),
+    [capabilities],
+  );
+  const navigation = useMemo(
+    () =>
+      (viewerRole === "family_member" ? familyNavigation : viewerRole === "doctor" ? doctorNavigation : caregiverNavigation)
+        .filter((item) => hasCapability(item.requiredCapability)),
+    [hasCapability, viewerRole],
+  );
+  const mobilePrimaryTabs = useMemo(() => navigation.slice(0, 5), [navigation]);
+  const allowedPaths = useMemo(() => roleAllowedPaths(viewerRole, capabilities), [capabilities, viewerRole]);
+  const canManageFamily = capabilities.includes("manage_family");
+  const canViewInsurance = capabilities.includes("view_insurance");
+  const canViewAuditLog = capabilities.includes("view_audit_log");
   const openSettingsSection = (section: "profile" | "preferences" | "privacy" | "access") => {
     navigate(`/settings?section=${section}`);
     setProfileOpen(false);
@@ -134,6 +137,10 @@ export const AppShell = () => {
   const patientLabel = `${patient.preferredName ?? patient.name} - ${calcAge(patient.dateOfBirth)}`;
   const criticalMeds = bootstrap.data.medications.filter((item) => item.isActive).slice(0, 5);
   const roleTitle = roleLabel(viewerRole);
+  const headerTitle =
+    viewerRole === "doctor"
+      ? `${bootstrap.viewer.name} is reviewing ${patient.preferredName ?? patient.name}`
+      : `${bootstrap.viewer.name.split(" ")[0]} is caring for ${patient.preferredName ?? patient.name}`;
 
   const markNotificationRead = async (notificationId: string) => {
     try {
@@ -233,7 +240,7 @@ export const AppShell = () => {
               <p className="text-sm font-semibold uppercase tracking-[0.2em] text-textSecondary">{pageTitle}</p>
               <div className="mt-1 flex flex-wrap items-center gap-2">
                 <h2 className="truncate text-xl font-bold text-textPrimary">
-                  {bootstrap.viewer.name.split(" ")[0]} is caring for {patient.preferredName ?? patient.name}
+                  {headerTitle}
                 </h2>
                 <span className="rounded-full bg-brandSoft px-3 py-1 text-sm font-semibold text-brandDark">{patientLabel}</span>
                 <Badge tone="brand">{roleTitle}</Badge>
@@ -284,9 +291,11 @@ export const AppShell = () => {
                   <button type="button" className="w-full rounded-2xl px-4 py-3 text-left text-base font-semibold text-textPrimary hover:bg-slate-50" onClick={() => openSettingsSection("privacy")}>
                     Access & privacy
                   </button>
-                  <button type="button" className="w-full rounded-2xl px-4 py-3 text-left text-base font-semibold text-textPrimary hover:bg-slate-50" onClick={() => openSettingsSection("access")}>
-                    Sharing access
-                  </button>
+                  {canManageFamily || canViewAuditLog ? (
+                    <button type="button" className="w-full rounded-2xl px-4 py-3 text-left text-base font-semibold text-textPrimary hover:bg-slate-50" onClick={() => openSettingsSection("access")}>
+                      Sharing access
+                    </button>
+                  ) : null}
                   <button type="button" className="w-full rounded-2xl px-4 py-3 text-left text-base font-semibold text-textPrimary hover:bg-slate-50" onClick={() => { setProfileOpen(false); toast("One patient is active in this demo."); }}>
                     Switch patient
                   </button>
@@ -342,17 +351,19 @@ export const AppShell = () => {
 
       <button
         type="button"
-        className="fixed bottom-[84px] right-5 z-[9999] flex h-14 w-14 items-center justify-center rounded-full bg-brand text-white shadow-xl transition hover:scale-[1.08] lg:bottom-7 lg:right-7"
+        className="group fixed bottom-[84px] right-5 z-[9999] flex h-[56px] w-[56px] items-center justify-center rounded-full bg-gradient-to-br from-brand to-brandDark text-white shadow-[0_8px_28px_rgba(13,148,136,0.45)] transition-all duration-200 hover:scale-[1.08] hover:shadow-[0_10px_36px_rgba(13,148,136,0.55)] active:scale-95 lg:bottom-7 lg:right-7"
         onClick={() => setChatOpen(true)}
         aria-label="Open CareCircle AI chat"
       >
-        <MessageCircle className="h-[26px] w-[26px]" />
+        {activeInsights.length ? (
+          <span className="absolute inset-0 animate-ping rounded-full bg-brand/30" />
+        ) : null}
+        <MessageCircle className="relative h-[26px] w-[26px] transition-transform group-hover:rotate-[-8deg]" />
         {chatBadgeCount ? (
-          <span className="absolute right-0 top-0 flex h-[18px] min-w-[18px] -translate-y-1/4 translate-x-1/4 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-bold text-white">
-            {chatBadgeCount}
+          <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-danger px-1 text-[10px] font-bold text-white shadow-sm">
+            {chatBadgeCount > 9 ? "9+" : chatBadgeCount}
           </span>
         ) : null}
-        {activeInsights.length ? <span className="absolute inset-0 animate-ping rounded-full border border-brand/40" /> : null}
       </button>
 
       <Modal open={menuOpen} title="Navigation" onClose={() => setMenuOpen(false)}>
@@ -418,8 +429,12 @@ export const AppShell = () => {
             <div className="mt-3 grid gap-3 text-sm text-textSecondary sm:grid-cols-2">
               <p><strong className="text-textPrimary">Blood type:</strong> {patient.bloodType}</p>
               <p><strong className="text-textPrimary">Allergies:</strong> {patient.allergies.join(", ")}</p>
-              <p><strong className="text-textPrimary">Insurance:</strong> {patient.insuranceProvider}</p>
-              <p><strong className="text-textPrimary">ID:</strong> {patient.insuranceId}</p>
+              {canViewInsurance ? (
+                <>
+                  <p><strong className="text-textPrimary">Insurance:</strong> {patient.insuranceProvider}</p>
+                  <p><strong className="text-textPrimary">ID:</strong> {patient.insuranceId}</p>
+                </>
+              ) : null}
             </div>
             <div className="mt-4 rounded-2xl border border-borderColor bg-surface p-4">
               <p className="text-sm font-semibold text-textPrimary">Current medications</p>
@@ -515,17 +530,33 @@ export const AppShell = () => {
               onClick={(event) => event.stopPropagation()}
             >
               <div
-                className="flex min-h-14 cursor-move items-center justify-between border-b border-borderColor bg-surface px-4 py-3"
+                className="flex min-h-[60px] cursor-move items-center justify-between border-b border-borderColor bg-gradient-to-r from-surface to-brandSoft/20 px-4 py-3"
                 onPointerDown={(event) => dragControls.start(event)}
               >
-                <div>
-                  <p className="text-lg font-bold text-textPrimary">CareCircle AI</p>
-                  <p className="text-sm text-textSecondary">Warm support without leaving your place.</p>
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand to-brandDark shadow-sm">
+                    <MessageCircle className="h-4 w-4 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-textPrimary leading-none">CareCircle AI</p>
+                    <p className="mt-0.5 text-xs text-textSecondary">For {patient.preferredName ?? patient.name} | drag to reposition</p>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button variant="secondary" onClick={() => navigate("/care-chat")}>New chat</Button>
-                  <button type="button" className="rounded-full p-3 text-textSecondary hover:bg-slate-100" aria-label="Close CareCircle AI" onClick={() => setChatOpen(false)}>
-                    <X className="h-5 w-5" />
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    className="flex items-center gap-1.5 rounded-xl bg-brandSoft px-3 py-1.5 text-xs font-semibold text-brandDark transition hover:bg-brandSoft/80"
+                    onClick={() => navigate("/care-chat")}
+                  >
+                    Full view
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-full p-2.5 text-textSecondary transition hover:bg-slate-100"
+                    aria-label="Close CareCircle AI"
+                    onClick={() => setChatOpen(false)}
+                  >
+                    <X className="h-[18px] w-[18px]" />
                   </button>
                 </div>
               </div>

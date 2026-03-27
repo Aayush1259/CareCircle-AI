@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
-import { Activity, Sparkles } from "lucide-react";
+import { Activity, Lock, Sparkles } from "lucide-react";
 import toast from "react-hot-toast";
 import { LineChart } from "@/components/charts";
 import { Badge, Button, Card, Field, Input, Modal, SectionHeader, Select, Textarea } from "@/components/ui";
 import { useAppData } from "@/context/AppDataContext";
 import { formatDate } from "@/lib/format";
+import { resolveViewerRole } from "@/lib/roles";
 import { hasText, parseNumberInput, trimmedText } from "@/lib/validation";
 
 const vitalTabs = ["Blood Pressure", "Blood Sugar", "Heart Rate", "Weight", "Temperature"] as const;
@@ -35,6 +36,16 @@ export const VitalsPage = () => {
 
   if (!bootstrap) return null;
 
+  const viewerRole = resolveViewerRole(bootstrap.viewer.role, bootstrap.viewerAccess?.accessRole);
+  const capabilities =
+    bootstrap.capabilities ??
+    (viewerRole === "family_member"
+      ? ["view_vitals"]
+      : ["log_vitals", "view_ai_insights"]);
+  const canLogVitals = capabilities.includes("log_vitals");
+  const canViewAiInsights = capabilities.includes("view_ai_insights");
+  const canViewRawVitals = bootstrap.permissions?.canViewVitalsRaw ?? viewerRole !== "family_member";
+  const trendOnlyView = viewerRole === "family_member" && !canViewRawVitals;
   const vitals = bootstrap.data.healthVitals;
   const latest = vitals[0];
 
@@ -143,64 +154,107 @@ export const VitalsPage = () => {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {[
-          { label: "Blood Pressure", value: `${latest?.bloodPressureSystolic}/${latest?.bloodPressureDiastolic}`, detail: formatDate(latest?.date), tone: "brand" as const },
-          { label: "Blood Sugar", value: latest?.bloodGlucose, detail: `${formatDate(latest?.date)} | mg/dL`, tone: "warning" as const },
-          { label: "Heart Rate", value: latest?.heartRate, detail: `${formatDate(latest?.date)} | bpm`, tone: "success" as const },
-          { label: "Weight", value: latest?.weight, detail: `${formatDate(latest?.date)} | lbs`, tone: "brand" as const },
-          { label: "Temperature", value: latest?.temperature, detail: `${formatDate(latest?.date)} | F`, tone: "neutral" as const },
-          { label: "O2 Saturation", value: latest?.oxygenSaturation, detail: `${formatDate(latest?.date)} | %`, tone: "success" as const },
-        ].map((item) => (
-          <Card key={item.label}>
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-textSecondary">{item.label}</p>
-              <Badge tone={item.tone === "neutral" ? "neutral" : item.tone}>{item.tone === "warning" ? "Watch" : "Steady"}</Badge>
+      {trendOnlyView ? (
+        <Card className="border-amber-200 bg-amber-50">
+          <div className="flex items-start gap-3">
+            <Lock className="mt-1 h-5 w-5 text-amber-700" />
+            <div>
+              <p className="font-semibold text-amber-900">This account has trend-only vitals access.</p>
+              <p className="mt-1 text-sm text-amber-900/80">
+                Exact readings stay hidden until the primary caregiver enables raw vitals. You can still see when readings were logged and whether the care team is keeping up.
+              </p>
             </div>
-            <p className="mt-3 text-3xl font-bold text-textPrimary">{item.value ?? "--"}</p>
-            <p className="mt-1 text-sm text-textSecondary">{item.detail}</p>
-          </Card>
-        ))}
-      </div>
+          </div>
+        </Card>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {[
+            { label: "Blood Pressure", value: `${latest?.bloodPressureSystolic}/${latest?.bloodPressureDiastolic}`, detail: formatDate(latest?.date), tone: "brand" as const },
+            { label: "Blood Sugar", value: latest?.bloodGlucose, detail: `${formatDate(latest?.date)} | mg/dL`, tone: "warning" as const },
+            { label: "Heart Rate", value: latest?.heartRate, detail: `${formatDate(latest?.date)} | bpm`, tone: "success" as const },
+            { label: "Weight", value: latest?.weight, detail: `${formatDate(latest?.date)} | lbs`, tone: "brand" as const },
+            { label: "Temperature", value: latest?.temperature, detail: `${formatDate(latest?.date)} | F`, tone: "neutral" as const },
+            { label: "O2 Saturation", value: latest?.oxygenSaturation, detail: `${formatDate(latest?.date)} | %`, tone: "success" as const },
+          ].map((item) => (
+            <Card key={item.label}>
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold text-textSecondary">{item.label}</p>
+                <Badge tone={item.tone === "neutral" ? "neutral" : item.tone}>{item.tone === "warning" ? "Watch" : "Steady"}</Badge>
+              </div>
+              <p className="mt-3 text-3xl font-bold text-textPrimary">{item.value ?? "--"}</p>
+              <p className="mt-1 text-sm text-textSecondary">{item.detail}</p>
+            </Card>
+          ))}
+        </div>
+      )}
 
       <Card>
         <SectionHeader
           title="Trend charts"
-          description="Normal-looking trends are shaded in soft color so they are easy to scan."
+          description={
+            trendOnlyView
+              ? "This role can only confirm that vitals were logged, not see exact values."
+              : "Normal-looking trends are shaded in soft color so they are easy to scan."
+          }
           action={
             <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" onClick={analyzeReadings}>
-                <Sparkles className="h-4 w-4" />
-                Analyze my readings
-              </Button>
-              <Button onClick={() => setModalOpen(true)}>Log vitals</Button>
+              {canViewAiInsights ? (
+                <Button variant="secondary" onClick={analyzeReadings}>
+                  <Sparkles className="h-4 w-4" />
+                  Analyze my readings
+                </Button>
+              ) : null}
+              {canLogVitals ? <Button onClick={() => setModalOpen(true)}>Log vitals</Button> : null}
             </div>
           }
         />
-        <div className="mb-4 flex snap-x gap-2 overflow-x-auto pb-2 scrollbar-thin">
-          {vitalTabs.map((item) => (
-            <button
-              key={item}
-              type="button"
-              onClick={() => setTab(item)}
-              className={`shrink-0 snap-start whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold ${tab === item ? "bg-brand text-white" : "border border-borderColor bg-surface text-textSecondary transition hover:bg-slate-50"}`}
-            >
-              {item}
-            </button>
-          ))}
-        </div>
-        <LineChart
-          data={chartConfig}
-          options={{
-            responsive: true,
-            plugins: {
-              legend: { position: "bottom" },
-            },
-          }}
-        />
+        {trendOnlyView ? (
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="rounded-3xl border border-borderColor bg-slate-50 p-4">
+              <p className="text-sm font-semibold uppercase tracking-[0.16em] text-textSecondary">Recent readings</p>
+              <p className="mt-3 text-3xl font-bold text-textPrimary">{vitals.length}</p>
+              <p className="mt-1 text-sm text-textSecondary">entries logged for the active patient</p>
+            </div>
+            <div className="rounded-3xl border border-borderColor bg-slate-50 p-4">
+              <p className="text-sm font-semibold uppercase tracking-[0.16em] text-textSecondary">Last reading</p>
+              <p className="mt-3 text-2xl font-bold text-textPrimary">{latest ? formatDate(latest.date) : "--"}</p>
+              <p className="mt-1 text-sm text-textSecondary">Exact values remain private in this view</p>
+            </div>
+            <div className="rounded-3xl border border-borderColor bg-slate-50 p-4">
+              <p className="text-sm font-semibold uppercase tracking-[0.16em] text-textSecondary">What you can do</p>
+              <p className="mt-3 text-sm text-textSecondary">
+                Watch for new readings to appear here and ask the primary caregiver if you need exact numbers enabled.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="mb-4 flex snap-x gap-2 overflow-x-auto pb-2 scrollbar-thin">
+              {vitalTabs.map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => setTab(item)}
+                  className={`shrink-0 snap-start whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold ${tab === item ? "bg-brand text-white" : "border border-borderColor bg-surface text-textSecondary transition hover:bg-slate-50"}`}
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
+            <LineChart
+              data={chartConfig}
+              options={{
+                responsive: true,
+                plugins: {
+                  legend: { position: "bottom" },
+                },
+              }}
+            />
+          </>
+        )}
       </Card>
 
-      {analysis ? (
+      {canViewAiInsights && analysis ? (
         <Card>
           <SectionHeader title="AI vitals analysis" description="Plain-language trends, without alarm unless something truly stands out." />
           <div className="grid gap-4 lg:grid-cols-2">
@@ -237,7 +291,14 @@ export const VitalsPage = () => {
       ) : null}
 
       <Card>
-        <SectionHeader title="Normal range reference" description="A calm reminder of what most common ranges usually look like." />
+        <SectionHeader
+          title="Normal range reference"
+          description={
+            trendOnlyView
+              ? "General guidance stays visible, but this role still cannot open exact patient readings."
+              : "A calm reminder of what most common ranges usually look like."
+          }
+        />
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-sm">
             <thead>
@@ -256,7 +317,7 @@ export const VitalsPage = () => {
         </div>
       </Card>
 
-      <Modal open={modalOpen} title="Log vitals" onClose={() => setModalOpen(false)}>
+      <Modal open={modalOpen && canLogVitals} title="Log vitals" onClose={() => setModalOpen(false)}>
         <form
           className="grid gap-4"
           onSubmit={(event) => {

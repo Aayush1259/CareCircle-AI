@@ -3,7 +3,6 @@ import jwt from "jsonwebtoken";
 import type {
   AppSettingsRecord,
   AuthSession,
-  FamilyMemberRecord,
   NotificationPreferences,
   PatientAccessRecord,
   PatientAccessRole,
@@ -24,6 +23,11 @@ const passwordResetLifetimeMs = 1000 * 60 * 60;
 interface TokenPayload {
   viewerId: string;
   mode: "demo" | "supabase";
+  viewer: UserRecord;
+  patient: AuthSession["patient"];
+  access: AuthSession["access"];
+  capabilities: AuthSession["capabilities"];
+  expiresAt: string;
 }
 
 interface SignupInput {
@@ -77,13 +81,13 @@ const setLocalPassword = (email: string, password: string) => {
 const resolveAccessRole = (role: UserRole): PatientAccessRole => {
   if (role === "doctor") return "doctor";
   if (role === "admin" || role === "caregiver") return "primary_caregiver";
-  return "family";
+  return "family_member";
 };
 
 const resolveAccessLevel = (role: UserRole): PatientAccessRecord["accessLevel"] => {
   if (role === "doctor") return "clinical_access";
   if (role === "admin" || role === "caregiver") return "full_access";
-  return "can_log";
+  return "can_coordinate";
 };
 
 const buildDefaultSettings = (viewer: UserRecord): AppSettingsRecord => ({
@@ -105,26 +109,23 @@ const buildDefaultSettings = (viewer: UserRecord): AppSettingsRecord => ({
 const syncViewerWorkspace = (viewer: UserRecord) => {
   const state = getState();
   const patient = getPatient();
-  const accessRole = resolveAccessRole(viewer.role);
-  const accessLevel = resolveAccessLevel(viewer.role);
+  const defaultAccessRole = resolveAccessRole(viewer.role);
+  const defaultAccessLevel = resolveAccessLevel(viewer.role);
 
   let access = state.patientAccess.find(
     (record) => record.patientId === patient.id && record.userId === viewer.id,
   );
 
   if (access) {
-    access.email = viewer.email;
-    access.name = viewer.name;
-    access.accessRole = accessRole;
-    access.accessLevel = accessLevel;
-    access.capabilities = buildPatientAccessRecord({
+    const nextAccess = buildPatientAccessRecord({
       id: access.id,
       patientId: access.patientId,
       userId: viewer.id,
       email: viewer.email,
       name: viewer.name,
-      accessRole,
-      accessLevel,
+      accessRole: access.accessRole,
+      accessLevel: access.accessLevel,
+      permissions: access.permissions,
       invitedBy: access.invitedBy,
       joinStatus: access.joinStatus,
       inviteToken: access.inviteToken,
@@ -132,9 +133,8 @@ const syncViewerWorkspace = (viewer: UserRecord) => {
       updatedAt: new Date().toISOString(),
       acceptedAt: access.acceptedAt,
       lastActive: new Date().toISOString(),
-    }).capabilities;
-    access.updatedAt = new Date().toISOString();
-    access.lastActive = new Date().toISOString();
+    });
+    Object.assign(access, nextAccess);
   } else {
     access = buildPatientAccessRecord({
       id: nextId("access"),
@@ -142,8 +142,8 @@ const syncViewerWorkspace = (viewer: UserRecord) => {
       userId: viewer.id,
       email: viewer.email,
       name: viewer.name,
-      accessRole,
-      accessLevel,
+      accessRole: defaultAccessRole,
+      accessLevel: defaultAccessLevel,
       invitedBy: patient.userId,
       joinStatus: "active",
       inviteToken: nextId("invite"),
@@ -158,60 +158,37 @@ const syncViewerWorkspace = (viewer: UserRecord) => {
     state.settings.unshift(buildDefaultSettings(viewer));
   }
 
-  if (viewer.role !== "doctor") {
-    const familyRole: FamilyMemberRecord["role"] =
-      viewer.role === "caregiver" || viewer.role === "admin" ? "primary_caregiver" : "family";
-    const permissions: FamilyMemberRecord["permissions"] =
-      viewer.role === "caregiver" || viewer.role === "admin" ? "full_access" : "can_log";
-    const existingFamily = state.familyMembers.find((member) => member.userId === viewer.id || member.email.toLowerCase() === viewer.email.toLowerCase());
-    if (existingFamily) {
-      existingFamily.userId = viewer.id;
-      existingFamily.name = viewer.name;
-      existingFamily.email = viewer.email;
-      existingFamily.role = familyRole;
-      existingFamily.permissions = permissions;
-      existingFamily.joinStatus = "active";
-      existingFamily.lastActive = new Date().toISOString();
-      existingFamily.acceptedAt = existingFamily.acceptedAt ?? new Date().toISOString();
-    } else {
-      state.familyMembers.unshift({
-        id: nextId("family"),
-        patientId: patient.id,
-        invitedBy: patient.userId,
-        userId: viewer.id,
-        name: viewer.name,
-        email: viewer.email,
-        relationship: familyRole === "primary_caregiver" ? "Primary caregiver" : "Family member",
-        role: familyRole,
-        permissions,
-        joinStatus: "active",
-        inviteToken: nextId("invite"),
-        createdAt: new Date().toISOString(),
-        acceptedAt: new Date().toISOString(),
-        lastActive: new Date().toISOString(),
-      });
-    }
-  }
-
   return access;
 };
 
-const buildSession = (viewer: UserRecord, mode: "demo" | "supabase"): AuthSession => {
-  setActiveUser(viewer.id);
-  const access = syncViewerWorkspace(viewer);
+const buildSession = async (viewer: UserRecord, mode: "demo" | "supabase"): Promise<AuthSession> => {
+  let access = syncViewerWorkspace(viewer);
+  let patient = getPatient();
+
+  if (mode === "supabase") {
+    const snapshot = await persistenceService.loadRequestSnapshot(viewer.id);
+    const nextAccess =
+      snapshot.patientAccess.find((record) => record.userId === viewer.id && record.patientId === snapshot.activePatientId) ??
+      null;
+    access = nextAccess ?? access;
+    patient = snapshot.patients[0] ?? patient;
+  } else {
+    setActiveUser(viewer.id);
+  }
+
   const expiresAt = new Date(Date.now() + sessionDurationMs).toISOString();
-  const token = jwt.sign({ viewerId: viewer.id, mode }, env.jwtSecret, {
-    expiresIn: "7d",
-  });
-  return {
-    token,
+  const session: Omit<AuthSession, "token"> = {
     viewer,
-    patient: getPatient(),
+    patient,
     access,
     capabilities: access.capabilities,
     mode,
     expiresAt,
   };
+  const token = jwt.sign({ viewerId: viewer.id, ...session }, env.jwtSecret, {
+    expiresIn: "7d",
+  });
+  return { token, ...session };
 };
 
 const createViewer = (input: {
@@ -308,7 +285,7 @@ export const authService = {
         if (metadata.license_number) viewer.licenseNumber = metadata.license_number;
         setLocalPassword(normalizedEmail, password);
         await persistenceService.persistUser(viewer);
-        return buildSession(viewer, "supabase");
+        return await buildSession(viewer, "supabase");
       }
     }
 
@@ -320,7 +297,7 @@ export const authService = {
 
     viewer.lastLogin = new Date().toISOString();
     await persistenceService.persistUser(viewer);
-    return buildSession(viewer, "demo");
+    return await buildSession(viewer, "demo");
   },
 
   async signup(input: SignupInput) {
@@ -377,7 +354,7 @@ export const authService = {
     setLocalPassword(email, password);
     await persistenceService.persistUser(viewer);
 
-    return buildSession(viewer, mode);
+    return await buildSession(viewer, mode);
   },
 
   async exchangeOAuthAccessToken(input: OAuthExchangeInput) {
@@ -437,7 +414,7 @@ export const authService = {
     viewer.licenseNumber = input.licenseNumber?.trim() || viewer.licenseNumber || metadata.license_number;
 
     await persistenceService.persistUser(viewer);
-    return buildSession(viewer, "supabase");
+    return await buildSession(viewer, "supabase");
   },
 
   async requestPasswordReset({ email }: PasswordResetRequest) {
@@ -514,9 +491,15 @@ export const authService = {
 
     try {
       const decoded = jwt.verify(token, env.jwtSecret) as TokenPayload;
-      const viewer = getViewerById(decoded.viewerId);
-      if (!viewer) return null;
-      return buildSession(viewer, decoded.mode);
+      return {
+        token,
+        viewer: decoded.viewer,
+        patient: decoded.patient,
+        access: decoded.access,
+        capabilities: decoded.capabilities,
+        mode: decoded.mode,
+        expiresAt: decoded.expiresAt,
+      };
     } catch {
       return null;
     }

@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
-import { AlertTriangle, Download, PhoneCall, Printer, QrCode, RefreshCcw, Share2, ShieldAlert } from "lucide-react";
+import { Download, PhoneCall, Printer, QrCode, RefreshCcw, Share2, ShieldAlert } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import toast from "react-hot-toast";
 import { Badge, Button, Card, Modal, SectionHeader } from "@/components/ui";
 import { useAppData } from "@/context/AppDataContext";
-import { calcAge, formatDate } from "@/lib/format";
 import { apiBase } from "@/lib/api";
+import { calcAge, formatDate } from "@/lib/format";
 
 const backendUrl = apiBase.endsWith("/api") ? apiBase.slice(0, -4) : apiBase;
 
@@ -27,14 +27,18 @@ export const EmergencyPage = () => {
   if (!bootstrap) return null;
 
   const { patient, data } = bootstrap;
+  const canShareEmergency = bootstrap.capabilities.includes("share_emergency");
+  const canViewInsurance = bootstrap.capabilities.includes("view_insurance");
   const activeMedications = data.medications.filter((item) => item.isActive);
-  const shareableFamily = data.familyMembers.filter((member) => member.email);
+  const shareableFamily = data.familyMembers.filter((member) => member.joinStatus === "active" && member.email);
+  const primaryProtocolId = data.emergencyProtocols[0]?.id ?? "";
+  const publicEmergencyUrl = shareUrl || `${backendUrl}/api/public/emergency/${data.emergencyProtocols[0]?.shareToken ?? ""}`;
 
   const openShareTools = async () => {
     try {
       const result = await request<{ url: string }>("/emergency/share-link", {
         method: "POST",
-        body: JSON.stringify({ protocolId: data.emergencyProtocols[0]?.id }),
+        body: JSON.stringify({ protocolId: primaryProtocolId }),
       });
       setShareUrl(result.url);
       setSelectedFamilyIds(shareableFamily.map((member) => member.id));
@@ -48,7 +52,7 @@ export const EmergencyPage = () => {
     try {
       const result = await request<{ url: string }>("/emergency/share-link", {
         method: "POST",
-        body: JSON.stringify({ protocolId: data.emergencyProtocols[0]?.id }),
+        body: JSON.stringify({ protocolId: primaryProtocolId }),
       });
       setShareUrl(result.url);
       setQrOpen(true);
@@ -92,6 +96,8 @@ export const EmergencyPage = () => {
     [patient.primaryDiagnosis, patient.secondaryConditions],
   );
 
+  const secondaryActionGrid = `mt-4 grid gap-3 sm:grid-cols-2 ${canShareEmergency ? "lg:grid-cols-4" : "lg:grid-cols-2"}`;
+
   return (
     <div className="space-y-6">
       <Card className="overflow-hidden bg-[#1A1A2E] p-0 text-white shadow-calm">
@@ -100,21 +106,27 @@ export const EmergencyPage = () => {
           <h1 className="mt-3 text-3xl font-bold text-white">One tap to the most important help.</h1>
 
           <div className="mt-6 grid gap-3 lg:grid-cols-3">
-            <a href="tel:911" className="flex min-h-[56px] items-center justify-center rounded-3xl border border-red-200 bg-white px-5 text-lg font-bold text-red-600">
-              📞 Call 911
+            <a
+              href="tel:911"
+              className="flex min-h-[56px] items-center justify-center rounded-3xl border border-red-200 bg-white px-5 text-lg font-bold text-red-600"
+            >
+              <PhoneCall className="mr-2 h-5 w-5" />
+              Call 911
             </a>
             <a
               href={patient.primaryDoctorPhone ? `tel:${patient.primaryDoctorPhone.replaceAll(/[^0-9]/g, "")}` : "/settings"}
               className="flex min-h-[56px] items-center justify-center rounded-3xl border border-slate-500 bg-white px-5 text-lg font-bold text-slate-900"
             >
-              {patient.primaryDoctorPhone ? `👨‍⚕️ Call Dr. ${patient.primaryDoctorName.replace("Dr. ", "")}` : "No number saved - Add now"}
+              <PhoneCall className="mr-2 h-5 w-5" />
+              {patient.primaryDoctorPhone ? `Call Dr. ${patient.primaryDoctorName.replace("Dr. ", "")}` : "No number saved | Add now"}
             </a>
             <Button className="min-h-[56px] w-full" onClick={() => setInfoOpen(true)}>
-              📋 Patient Info Card
+              <ShieldAlert className="h-5 w-5" />
+              Patient Info Card
             </Button>
           </div>
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className={secondaryActionGrid}>
             <Button
               variant="secondary"
               className="min-h-[48px] bg-white text-brandDark"
@@ -126,17 +138,25 @@ export const EmergencyPage = () => {
                 window.open(`tel:${patient.primaryDoctorPhone.replaceAll(/[^0-9]/g, "")}`, "_self");
               }}
             >
-              📞 Call Now
+              <PhoneCall className="h-4 w-4" />
+              Call Now
             </Button>
             <Button variant="secondary" className="min-h-[48px] bg-white text-brandDark" onClick={printCard}>
-              ⬇️ Download PDF
+              <Download className="h-4 w-4" />
+              Download PDF
             </Button>
-            <Button variant="secondary" className="min-h-[48px] bg-white text-brandDark" onClick={() => void openShareTools()}>
-              👨‍👩‍👧 Share with Family
-            </Button>
-            <Button variant="secondary" className="min-h-[48px] bg-white text-brandDark" onClick={() => void openQrTools()}>
-              🔗 Copy QR Link
-            </Button>
+            {canShareEmergency ? (
+              <Button variant="secondary" className="min-h-[48px] bg-white text-brandDark" onClick={() => void openShareTools()}>
+                <Share2 className="h-4 w-4" />
+                Share with Family
+              </Button>
+            ) : null}
+            {canShareEmergency ? (
+              <Button variant="secondary" className="min-h-[48px] bg-white text-brandDark" onClick={() => void openQrTools()}>
+                <QrCode className="h-4 w-4" />
+                Copy QR Link
+              </Button>
+            ) : null}
           </div>
         </div>
       </Card>
@@ -145,7 +165,14 @@ export const EmergencyPage = () => {
         <SectionHeader
           title="Emergency protocols"
           description="Clear, calm steps personalized to Ellie's conditions, allergies, and medications."
-          action={<Button onClick={regenerateProtocols}><RefreshCcw className="h-4 w-4" />Regenerate all</Button>}
+          action={
+            canShareEmergency ? (
+              <Button onClick={regenerateProtocols}>
+                <RefreshCcw className="h-4 w-4" />
+                Regenerate all
+              </Button>
+            ) : undefined
+          }
         />
         <div className="grid gap-4 lg:grid-cols-2">
           {data.emergencyProtocols.map((protocol) => {
@@ -178,14 +205,20 @@ export const EmergencyPage = () => {
                       {downloadingId === protocol.id ? "Downloading..." : "PDF"}
                     </Button>
                   </a>
-                  <Button variant="ghost" onClick={() => void openShareTools()}>
-                    <Share2 className="h-4 w-4" />
-                    Share
-                  </Button>
+                  {canShareEmergency ? (
+                    <Button variant="ghost" onClick={() => void openShareTools()}>
+                      <Share2 className="h-4 w-4" />
+                      Share
+                    </Button>
+                  ) : null}
                 </div>
 
-                <button type="button" className="mt-4 text-base font-semibold text-brandDark" onClick={() => setExpandedId(expanded ? null : protocol.id)}>
-                  {expanded ? "Hide steps ▲" : "View steps ▼"}
+                <button
+                  type="button"
+                  className="mt-4 text-base font-semibold text-brandDark"
+                  onClick={() => setExpandedId(expanded ? null : protocol.id)}
+                >
+                  {expanded ? "Hide steps" : "View steps"}
                 </button>
 
                 {expanded ? (
@@ -218,14 +251,22 @@ export const EmergencyPage = () => {
 
       <Card>
         <div className="flex flex-col items-center justify-center gap-4 text-center">
-          <QRCodeSVG value={shareUrl || `${backendUrl}/api/public/emergency/${data.emergencyProtocols[0]?.shareToken ?? ""}`} size={180} />
+          <QRCodeSVG value={publicEmergencyUrl} size={180} />
           <div>
             <p className="text-lg font-bold text-textPrimary">Scan for emergency info - no login required</p>
             <p className="mt-1 text-sm text-textSecondary">Print and keep this QR code on the fridge, in a wallet, or by the patient's chair.</p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <Button variant="secondary" onClick={() => void openQrTools()}><QrCode className="h-4 w-4" />Download QR as image</Button>
-            <Button onClick={printCard}><Printer className="h-4 w-4" />Print Emergency Card</Button>
+            {canShareEmergency ? (
+              <Button variant="secondary" onClick={() => void openQrTools()}>
+                <QrCode className="h-4 w-4" />
+                Download QR as image
+              </Button>
+            ) : null}
+            <Button onClick={printCard}>
+              <Printer className="h-4 w-4" />
+              Print Emergency Card
+            </Button>
           </div>
         </div>
       </Card>
@@ -235,7 +276,13 @@ export const EmergencyPage = () => {
           <div className="rounded-3xl border border-borderColor p-4">
             <p className="text-sm font-semibold uppercase tracking-[0.18em] text-textSecondary">Identity</p>
             <div className="mt-3 flex items-center gap-4">
-              {patient.photoUrl ? <img src={patient.photoUrl} alt={`${patient.name} profile`} className="h-20 w-20 rounded-3xl object-cover" /> : <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-brandSoft text-brandDark text-2xl font-bold">{patient.name[0]}</div>}
+              {patient.photoUrl ? (
+                <img src={patient.photoUrl} alt={`${patient.name} profile`} className="h-20 w-20 rounded-3xl object-cover" />
+              ) : (
+                <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-brandSoft text-2xl font-bold text-brandDark">
+                  {patient.name[0]}
+                </div>
+              )}
               <div>
                 <p className="text-xl font-bold text-textPrimary">{patient.name}</p>
                 <p className="text-textSecondary">Age {calcAge(patient.dateOfBirth)} | DOB {formatDate(patient.dateOfBirth)}</p>
@@ -282,11 +329,32 @@ export const EmergencyPage = () => {
             <p className="font-semibold text-textPrimary">Contacts</p>
             <p className="mt-2 text-textSecondary">Primary doctor: {patient.primaryDoctorName} - {patient.primaryDoctorPhone}</p>
             <p className="text-textSecondary">Hospital: {patient.hospitalPreference}</p>
-            <p className="text-textSecondary">Insurance: {patient.insuranceProvider} - {patient.insuranceId}</p>
+            {canViewInsurance ? (
+              <p className="text-textSecondary">Insurance: {patient.insuranceProvider} - {patient.insuranceId}</p>
+            ) : null}
           </div>
           <div className="flex justify-end gap-3">
-            <Button variant="secondary" onClick={printCard}><Printer className="h-4 w-4" />Print</Button>
-            <Button onClick={printCard}><Download className="h-4 w-4" />Download PDF</Button>
+            {canShareEmergency ? (
+              <Button
+                variant="ghost"
+                className="mb-2 sm:mb-0"
+                onClick={() => {
+                  setInfoOpen(false);
+                  void openQrTools();
+                }}
+              >
+                <QrCode className="h-4 w-4" />
+                Share with First Responders
+              </Button>
+            ) : null}
+            <Button variant="secondary" onClick={printCard}>
+              <Printer className="h-4 w-4" />
+              Print
+            </Button>
+            <Button onClick={printCard}>
+              <Download className="h-4 w-4" />
+              Download PDF
+            </Button>
           </div>
         </div>
       </Modal>
@@ -304,7 +372,7 @@ export const EmergencyPage = () => {
                   )
                 }
               />
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brandSoft text-brandDark font-bold">{member.name.slice(0, 1)}</div>
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brandSoft font-bold text-brandDark">{member.name.slice(0, 1)}</div>
               <div className="min-w-0 flex-1">
                 <p className="font-semibold text-textPrimary">{member.name}</p>
                 <p className="text-sm text-textSecondary">{member.role.replaceAll("_", " ")}</p>
@@ -313,7 +381,12 @@ export const EmergencyPage = () => {
           ))}
           <div className="flex flex-wrap gap-3">
             <Button onClick={sendToFamily}>Send Email to Selected</Button>
-            <Button variant="secondary" onClick={() => navigator.clipboard.writeText(shareUrl).then(() => toast.success("Link copied to clipboard."))}>Copy Shareable Link</Button>
+            <Button
+              variant="secondary"
+              onClick={() => navigator.clipboard.writeText(shareUrl).then(() => toast.success("Link copied to clipboard."))}
+            >
+              Copy Shareable Link
+            </Button>
           </div>
         </div>
       </Modal>
@@ -321,10 +394,15 @@ export const EmergencyPage = () => {
       <Modal open={qrOpen} title="Emergency QR link" onClose={() => setQrOpen(false)}>
         <div className="flex flex-col items-center gap-4 text-center">
           <QRCodeSVG value={shareUrl} size={200} />
-          <p className="text-sm text-textSecondary break-all">{shareUrl}</p>
+          <p className="break-all text-sm text-textSecondary">{shareUrl}</p>
           <p className="text-sm text-textSecondary">Print this QR code and keep it on the fridge or in your wallet.</p>
           <div className="flex flex-wrap gap-3">
-            <Button variant="secondary" onClick={() => navigator.clipboard.writeText(shareUrl).then(() => toast.success("Link copied to clipboard."))}>Download QR Image</Button>
+            <Button
+              variant="secondary"
+              onClick={() => navigator.clipboard.writeText(shareUrl).then(() => toast.success("Link copied to clipboard."))}
+            >
+              Download QR Image
+            </Button>
             <Button onClick={printCard}>Print Emergency Card</Button>
           </div>
         </div>
