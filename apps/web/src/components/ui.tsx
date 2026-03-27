@@ -1,15 +1,21 @@
 import { AnimatePresence, motion } from "framer-motion";
+import type { HTMLMotionProps } from "framer-motion";
 import clsx from "clsx";
 import { X } from "lucide-react";
 
 export const cn = (...classes: Array<string | false | null | undefined>) => clsx(classes);
 
-export const Card = ({ className, children }: { className?: string; children: React.ReactNode }) => (
+export const Card = ({
+  className,
+  children,
+  ...props
+}: HTMLMotionProps<"section">) => (
   <motion.section
     initial={{ opacity: 0, y: 10 }}
     animate={{ opacity: 1, y: 0 }}
     transition={{ duration: 0.15 }}
     className={cn("surface-panel panel-pad min-w-0", className)}
+    {...props}
   >
     {children}
   </motion.section>

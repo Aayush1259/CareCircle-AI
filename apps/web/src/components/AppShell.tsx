@@ -14,7 +14,6 @@ import {
   MessageCircle,
   MoreHorizontal,
   Pill,
-  Settings,
   ShieldAlert,
   Users,
   X,
@@ -37,7 +36,6 @@ const caregiverNavigation = [
   { to: "/family", label: "Family Hub", icon: Users },
   { to: "/tasks", label: "Tasks", icon: ClipboardCheck },
   { to: "/emergency", label: "Emergency", icon: ShieldAlert },
-  { to: "/settings", label: "Settings", icon: Settings },
 ];
 
 const familyNavigation = [
@@ -46,7 +44,6 @@ const familyNavigation = [
   { to: "/tasks", label: "Tasks", icon: ClipboardCheck },
   { to: "/family", label: "Family Chat", icon: Users },
   { to: "/emergency", label: "Emergency", icon: ShieldAlert },
-  { to: "/settings", label: "Settings", icon: Settings },
 ];
 
 const doctorNavigation = [
@@ -56,7 +53,6 @@ const doctorNavigation = [
   { to: "/vitals", label: "Health Vitals", icon: HeartPulse },
   { to: "/appointments", label: "Appointments", icon: CalendarDays },
   { to: "/emergency", label: "Emergency", icon: ShieldAlert },
-  { to: "/settings", label: "Settings", icon: Settings },
 ];
 
 const caregiverMobileTabs = [
@@ -99,6 +95,10 @@ export const AppShell = () => {
   const navigation = viewerRole === "family_member" ? familyNavigation : viewerRole === "doctor" ? doctorNavigation : caregiverNavigation;
   const mobilePrimaryTabs = viewerRole === "family_member" ? familyMobileTabs : viewerRole === "doctor" ? doctorMobileTabs : caregiverMobileTabs;
   const allowedPaths = useMemo(() => roleAllowedPaths(viewerRole), [viewerRole]);
+  const openSettingsSection = (section: "profile" | "preferences" | "privacy" | "access") => {
+    navigate(`/settings?section=${section}`);
+    setProfileOpen(false);
+  };
 
   useEffect(() => {
     if (location.pathname.startsWith("/care-chat")) {
@@ -115,7 +115,10 @@ export const AppShell = () => {
   }, [allowedPaths, location.pathname, navigate, viewerRole]);
 
   const pageTitle = useMemo(
-    () => navigation.find((item) => location.pathname.startsWith(item.to))?.label ?? "CareCircle AI",
+    () => {
+      if (location.pathname.startsWith("/settings")) return "Settings";
+      return navigation.find((item) => location.pathname.startsWith(item.to))?.label ?? "CareCircle AI";
+    },
     [location.pathname, navigation],
   );
 
@@ -272,11 +275,17 @@ export const AppShell = () => {
 
               {profileOpen ? (
                 <div className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-60 rounded-3xl border border-borderColor bg-surface p-2 shadow-xl">
-                  <button type="button" className="w-full rounded-2xl px-4 py-3 text-left text-base font-semibold text-textPrimary hover:bg-slate-50" onClick={() => { setProfileOpen(false); navigate("/settings"); }}>
-                    View profile
+                  <button type="button" className="w-full rounded-2xl px-4 py-3 text-left text-base font-semibold text-textPrimary hover:bg-slate-50" onClick={() => openSettingsSection("profile")}>
+                    My profile
                   </button>
-                  <button type="button" className="w-full rounded-2xl px-4 py-3 text-left text-base font-semibold text-textPrimary hover:bg-slate-50" onClick={() => { setProfileOpen(false); navigate("/settings"); }}>
-                    Settings
+                  <button type="button" className="w-full rounded-2xl px-4 py-3 text-left text-base font-semibold text-textPrimary hover:bg-slate-50" onClick={() => openSettingsSection("preferences")}>
+                    App preferences
+                  </button>
+                  <button type="button" className="w-full rounded-2xl px-4 py-3 text-left text-base font-semibold text-textPrimary hover:bg-slate-50" onClick={() => openSettingsSection("privacy")}>
+                    Access & privacy
+                  </button>
+                  <button type="button" className="w-full rounded-2xl px-4 py-3 text-left text-base font-semibold text-textPrimary hover:bg-slate-50" onClick={() => openSettingsSection("access")}>
+                    Sharing access
                   </button>
                   <button type="button" className="w-full rounded-2xl px-4 py-3 text-left text-base font-semibold text-textPrimary hover:bg-slate-50" onClick={() => { setProfileOpen(false); toast("One patient is active in this demo."); }}>
                     Switch patient
@@ -377,6 +386,13 @@ export const AppShell = () => {
                 {label}
               </Link>
             ))}
+          <Link
+            to="/settings?section=profile"
+            onClick={() => setMoreOpen(false)}
+            className="flex min-h-12 items-center gap-3 rounded-2xl border border-borderColor p-4 text-base font-semibold text-textPrimary"
+          >
+            My profile & preferences
+          </Link>
           <Button onClick={() => { setMoreOpen(false); setChatOpen(true); }}>
             <MessageCircle className="h-4 w-4" />
             Open CareCircle AI

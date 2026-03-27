@@ -7,6 +7,7 @@ import { Badge, Button, Card, Field, Input, Modal, SectionHeader, Select, Textar
 import { useAppData } from "@/context/AppDataContext";
 import { apiBase } from "@/lib/api";
 import { formatDate } from "@/lib/format";
+import { roleLabel, roleDescription } from "@/lib/roles";
 import { hasText, trimmedText } from "@/lib/validation";
 
 const commonConditions = [
@@ -29,12 +30,12 @@ const videoGuides = [
 
 const faqs = [
   ["How do I add a new medication?", "Open Medications, tap Add Medication, and save the name, dose, and schedule."],
-  ["How do I invite a family member?", "Go to Family Hub or Settings, choose Invite Member, enter their details, and send the invite email."],
+  ["How do I invite a family member?", "Go to Family Hub or open the avatar menu, choose Invite Member, enter their details, and send the invite email."],
   ["What does the AI pattern analysis do?", "It reviews recent notes or readings, looks for trends, and explains what may be worth watching."],
   ["How do I upload a medical document?", "Open Documents, choose the file, pick a category, and tap Upload and Analyze."],
   ["How do I generate an emergency protocol?", "Open Emergency and use Regenerate with AI or Regenerate all protocols."],
   ["Can I manage more than one patient?", "The data model supports it, but this demo keeps one patient active so things stay simple."],
-  ["How do I change notification times?", "Open Settings, go to Notifications, and update the reminder toggles, time, or weekly summary day."],
+  ["How do I change notification times?", "Open the avatar menu, go to Notifications, and update the reminder toggles, time, or weekly summary day."],
   ["Is my data private and secure?", "Private files stay in protected storage and access follows patient-based permissions when Supabase is configured."],
   ["How do I export my data?", "Use Export My Data for a CSV or Download All Documents for a ZIP of uploaded files."],
   ["What do I do if I find incorrect AI information?", "Please tell your doctor for medical decisions and send us feedback so we can review the response quickly."],
@@ -75,6 +76,7 @@ export const SettingsPage = () => {
   const [patientSaving, setPatientSaving] = useState(false);
   const [feedbackSaving, setFeedbackSaving] = useState(false);
   const currentSettings = bootstrap?.data.settings.find((item) => item.userId === bootstrap.viewer.id);
+  const section = params.get("section") ?? "";
 
   const [profile, setProfile] = useState(() => ({
     name: bootstrap?.viewer.name ?? "",
@@ -105,6 +107,26 @@ export const SettingsPage = () => {
   const [patientErrors, setPatientErrors] = useState<Record<string, string>>({});
   const canExport = bootstrap?.capabilities.includes("export_data") ?? false;
   const securityAuditLogs = bootstrap?.data.securityAuditLogs.slice(0, 6) ?? [];
+
+  useEffect(() => {
+    const sectionToId: Record<string, string> = {
+      profile: "settings-profile",
+      preferences: "settings-display",
+      display: "settings-display",
+      notifications: "settings-notifications",
+      privacy: "settings-privacy",
+      access: "settings-access",
+      support: "settings-support",
+      patient: "settings-patient",
+    };
+
+    const elementId = sectionToId[section];
+    if (!elementId) return;
+
+    window.requestAnimationFrame(() => {
+      document.getElementById(elementId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, [section]);
 
   useEffect(() => {
     const token = params.get("confirmEmail");
@@ -293,8 +315,43 @@ export const SettingsPage = () => {
 
   return (
     <div className="space-y-6">
+      <Card id="settings-access" className="scroll-mt-24 border-brand/10 bg-brandSoft/20">
+        <SectionHeader
+          title="Access overview"
+          description="This page shows your personal account settings and the patient-specific permissions attached to your role."
+        />
+        <div className="grid gap-4 lg:grid-cols-3">
+          <div className="rounded-3xl border border-borderColor bg-surface p-4">
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-textSecondary">Signed in as</p>
+            <p className="mt-2 text-xl font-bold text-textPrimary">{bootstrap.viewer.name}</p>
+            <p className="mt-1 text-sm text-textSecondary">{bootstrap.viewer.email}</p>
+          </div>
+          <div className="rounded-3xl border border-borderColor bg-surface p-4">
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-textSecondary">Login role</p>
+            <p className="mt-2 text-xl font-bold text-textPrimary">{roleLabel(bootstrap.viewer.role)}</p>
+            <p className="mt-1 text-sm text-textSecondary">{roleDescription(bootstrap.viewer.role)}</p>
+          </div>
+          <div className="rounded-3xl border border-borderColor bg-surface p-4">
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-textSecondary">Patient access</p>
+            <p className="mt-2 text-xl font-bold text-textPrimary">
+              {bootstrap.viewerAccess ? bootstrap.viewerAccess.accessLevel.replaceAll("_", " ") : "No patient access record"}
+            </p>
+            <p className="mt-1 text-sm text-textSecondary">
+              {bootstrap.viewerAccess ? `${bootstrap.viewerAccess.accessRole.replaceAll("_", " ")} access for the active patient` : "Permissions will appear once an access record exists."}
+            </p>
+          </div>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {bootstrap.capabilities.map((capability) => (
+            <Badge key={capability} tone="brand">
+              {capability.replaceAll("_", " ")}
+            </Badge>
+          ))}
+        </div>
+      </Card>
+
       <div className="grid gap-6 xl:grid-cols-2">
-        <Card>
+        <Card id="settings-profile" className="scroll-mt-24">
           <SectionHeader title="Profile" description="Keep your contact details and photo up to date." />
           <div className="grid gap-4">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
@@ -328,7 +385,7 @@ export const SettingsPage = () => {
           </div>
         </Card>
 
-        <Card>
+        <Card id="settings-patient" className="scroll-mt-24">
           <SectionHeader title="Patient profile" description="Everything responders, doctors, and family members need in one place." />
           <div className="grid gap-4">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
@@ -457,7 +514,7 @@ export const SettingsPage = () => {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <Card>
+        <Card id="settings-notifications" className="scroll-mt-24">
           <SectionHeader title="Notifications" description="Turn on the nudges that actually help." />
           <div className="space-y-4">
             {[
@@ -495,7 +552,7 @@ export const SettingsPage = () => {
           </div>
         </Card>
 
-        <Card>
+        <Card id="settings-display" className="scroll-mt-24">
           <SectionHeader title="Display settings" description="Make the whole app easier to read at a glance." />
           <div className="grid gap-5">
             <div>
@@ -549,7 +606,7 @@ export const SettingsPage = () => {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <Card>
+        <Card id="settings-support" className="scroll-mt-24">
           <SectionHeader title="Help and support" description="Answers and quick guides without the tech jargon." action={<Button variant="ghost" onClick={() => setFeedbackOpen(true)}>Send Feedback</Button>} />
           <div className="space-y-3">
             {faqs.map(([question, answer]) => (
@@ -580,9 +637,9 @@ export const SettingsPage = () => {
         </Card>
       </div>
 
-      <Card>
-        <SectionHeader title="Data and privacy" description="Export what you need and keep control of your information." />
-        <div className="grid gap-4 lg:grid-cols-3">
+        <Card id="settings-privacy" className="scroll-mt-24">
+          <SectionHeader title="Data and privacy" description="Export what you need and keep control of your information." />
+          <div className="grid gap-4 lg:grid-cols-3">
           <Button
             disabled={!canExport}
             title={canExport ? "Download a CSV export of the patient workspace." : "This account does not have export permission."}
