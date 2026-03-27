@@ -5,6 +5,30 @@ export type FamilyRole =
   | "family"
   | "emergency_contact";
 export type PermissionLevel = "view_only" | "can_log" | "full_access";
+export type PatientAccessRole = FamilyRole | "doctor";
+export type PatientAccessLevel = PermissionLevel | "clinical_access";
+export type PatientCapability =
+  | "view_dashboard"
+  | "view_medications"
+  | "log_medications"
+  | "view_journal"
+  | "log_journal"
+  | "view_documents"
+  | "upload_documents"
+  | "view_appointments"
+  | "manage_appointments"
+  | "view_vitals"
+  | "log_vitals"
+  | "view_family"
+  | "manage_family"
+  | "view_tasks"
+  | "manage_tasks"
+  | "view_emergency"
+  | "share_emergency"
+  | "edit_patient"
+  | "export_data"
+  | "add_clinical_notes"
+  | "accept_invites";
 export type Frequency =
   | "once"
   | "twice"
@@ -71,6 +95,27 @@ export type ThemeMode = "teal" | "blue" | "purple";
 export type FontScale = "normal" | "large" | "extra_large";
 export type DashboardMode = "detailed" | "simplified";
 export type FeedbackSubject = "bug_report" | "feature_request" | "general_feedback" | "other";
+export type AuditActionType =
+  | "auth_signup"
+  | "auth_login"
+  | "auth_logout"
+  | "invite_sent"
+  | "invite_accepted"
+  | "invite_resend"
+  | "invite_cancel"
+  | "profile_updated"
+  | "patient_updated"
+  | "notification_updated"
+  | "display_updated"
+  | "feedback_submitted"
+  | "export_csv"
+  | "export_documents_zip"
+  | "emergency_share_link"
+  | "emergency_share_email"
+  | "document_uploaded"
+  | "document_reprocessed"
+  | "document_deleted"
+  | "access_denied";
 
 export interface NotificationPreferences {
   medicationReminders: boolean;
@@ -117,6 +162,24 @@ export interface PatientRecord {
   mobilityLevel: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface PatientAccessRecord {
+  id: string;
+  patientId: string;
+  userId?: string;
+  email: string;
+  name: string;
+  accessRole: PatientAccessRole;
+  accessLevel: PatientAccessLevel;
+  capabilities: PatientCapability[];
+  invitedBy: string;
+  joinStatus: "pending" | "active" | "revoked";
+  inviteToken: string;
+  createdAt: string;
+  updatedAt?: string;
+  acceptedAt?: string;
+  lastActive?: string;
 }
 
 export interface MedicationRecord {
@@ -243,6 +306,7 @@ export interface FamilyMemberRecord {
   createdAt: string;
   photoUrl?: string;
   lastActive?: string;
+  acceptedAt?: string;
 }
 
 export interface TaskRecord {
@@ -390,6 +454,20 @@ export interface FeedbackRecord {
   createdAt: string;
 }
 
+export interface SecurityAuditRecord {
+  id: string;
+  patientId: string;
+  userId: string;
+  userName: string;
+  action: AuditActionType;
+  resourceType: string;
+  resourceId?: string;
+  outcome: "allowed" | "blocked";
+  detail: string;
+  createdAt: string;
+  metadata?: Record<string, string | number | boolean>;
+}
+
 export interface PendingEmailUpdateRecord {
   id: string;
   userId: string;
@@ -404,6 +482,8 @@ export interface AuthSession {
   token: string;
   viewer: UserRecord;
   patient: PatientRecord;
+  access: PatientAccessRecord | null;
+  capabilities: PatientCapability[];
   mode: "demo" | "supabase";
   expiresAt: string;
 }
@@ -425,6 +505,7 @@ export interface DashboardSummary {
 export interface AppSnapshot {
   users: UserRecord[];
   patients: PatientRecord[];
+  patientAccess: PatientAccessRecord[];
   medications: MedicationRecord[];
   medicationLogs: MedicationLogRecord[];
   careJournal: CareJournalRecord[];
@@ -442,6 +523,7 @@ export interface AppSnapshot {
   activityEvents: ActivityEventRecord[];
   activityReactions: ActivityReactionRecord[];
   settings: AppSettingsRecord[];
+  securityAuditLogs: SecurityAuditRecord[];
   activeUserId: string;
   activePatientId: string;
 }
@@ -449,6 +531,9 @@ export interface AppSnapshot {
 export interface BootstrapPayload {
   viewer: UserRecord;
   patient: PatientRecord;
+  viewerAccess: PatientAccessRecord | null;
+  patientAccess: PatientAccessRecord[];
+  capabilities: PatientCapability[];
   dashboard: DashboardSummary;
   data: Omit<AppSnapshot, "activeUserId" | "activePatientId">;
 }

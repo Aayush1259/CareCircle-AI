@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowRight, HeartHandshake, LockKeyhole, Mail, Stethoscope, Users } from "lucide-react";
 import toast from "react-hot-toast";
 import type { UserRole } from "@carecircle/shared";
@@ -35,6 +35,7 @@ const roleOptions: Array<{
 
 export const SignupPage = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { signup, loading } = useAppData();
   const [form, setForm] = useState({
     name: "",
@@ -47,6 +48,7 @@ export const SignupPage = () => {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const selectedRole = useMemo(() => roleOptions.find((item) => item.role === form.role) ?? roleOptions[0], [form.role]);
+  const inviteToken = searchParams.get("inviteToken");
 
   const validate = () => {
     const nextErrors: Record<string, string> = {};
@@ -73,6 +75,10 @@ export const SignupPage = () => {
       });
 
       toast.success("Account created.");
+      if (inviteToken) {
+        navigate(`/invite/${inviteToken}`, { replace: true });
+        return;
+      }
       if (session.viewer.role === "caregiver") {
         navigate("/onboarding", { replace: true });
         return;
@@ -214,7 +220,7 @@ export const SignupPage = () => {
 
             <div className="mt-6 rounded-3xl bg-brandSoft/55 p-4">
               <p className="text-sm font-semibold text-textPrimary">Already have an account?</p>
-              <Link to="/login" className="mt-1 inline-flex text-sm font-semibold text-brandDark">
+              <Link to={inviteToken ? `/login?inviteToken=${inviteToken}` : "/login"} className="mt-1 inline-flex text-sm font-semibold text-brandDark">
                 Back to sign in
               </Link>
             </div>

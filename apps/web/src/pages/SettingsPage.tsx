@@ -5,6 +5,7 @@ import toast from "react-hot-toast";
 import type { FeedbackSubject } from "@carecircle/shared";
 import { Badge, Button, Card, Field, Input, Modal, SectionHeader, Select, Textarea, Toggle } from "@/components/ui";
 import { useAppData } from "@/context/AppDataContext";
+import { apiBase } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { hasText, trimmedText } from "@/lib/validation";
 
@@ -102,6 +103,8 @@ export const SettingsPage = () => {
   const [allergyDraft, setAllergyDraft] = useState("");
   const [profileErrors, setProfileErrors] = useState<Record<string, string>>({});
   const [patientErrors, setPatientErrors] = useState<Record<string, string>>({});
+  const canExport = bootstrap?.capabilities.includes("export_data") ?? false;
+  const securityAuditLogs = bootstrap?.data.securityAuditLogs.slice(0, 6) ?? [];
 
   useEffect(() => {
     const token = params.get("confirmEmail");
@@ -580,11 +583,20 @@ export const SettingsPage = () => {
       <Card>
         <SectionHeader title="Data and privacy" description="Export what you need and keep control of your information." />
         <div className="grid gap-4 lg:grid-cols-3">
-          <Button onClick={() => window.open("/api/settings/export/csv", "_blank", "noopener,noreferrer")}>
+          <Button
+            disabled={!canExport}
+            title={canExport ? "Download a CSV export of the patient workspace." : "This account does not have export permission."}
+            onClick={() => canExport && window.open(`${apiBase}/settings/export/csv`, "_blank", "noopener,noreferrer")}
+          >
             <Download className="h-4 w-4" />
             Export My Data
           </Button>
-          <Button variant="secondary" onClick={() => window.open("/api/settings/export/documents.zip", "_blank", "noopener,noreferrer")}>
+          <Button
+            variant="secondary"
+            disabled={!canExport}
+            title={canExport ? "Download a ZIP of patient documents." : "This account does not have export permission."}
+            onClick={() => canExport && window.open(`${apiBase}/settings/export/documents.zip`, "_blank", "noopener,noreferrer")}
+          >
             <Download className="h-4 w-4" />
             Download All Documents
           </Button>
@@ -592,6 +604,20 @@ export const SettingsPage = () => {
             <Trash2 className="h-4 w-4" />
             Delete Account
           </Button>
+        </div>
+        <div className="mt-6 rounded-3xl border border-borderColor bg-slate-50 p-4">
+          <p className="text-base font-semibold text-textPrimary">Recent security activity</p>
+          <div className="mt-3 space-y-3">
+            {securityAuditLogs.map((entry) => (
+              <div key={entry.id} className="flex items-start justify-between gap-3 rounded-2xl bg-white p-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-textPrimary">{entry.action.replaceAll("_", " ")}</p>
+                  <p className="text-sm text-textSecondary">{entry.detail}</p>
+                </div>
+                <p className="shrink-0 text-xs text-textSecondary">{formatDate(entry.createdAt)}</p>
+              </div>
+            ))}
+          </div>
         </div>
       </Card>
 

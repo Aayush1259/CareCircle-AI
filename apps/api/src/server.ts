@@ -13,8 +13,10 @@ import type {
   MedicationRecord,
   TaskRecord,
 } from "@carecircle/shared";
+import { hasCapability } from "@carecircle/shared";
 import { env, featureFlags } from "./env";
 import {
+  addAuditLog,
   addActivity,
   addFamilyMessage,
   addFeedbackRecord,
@@ -26,6 +28,7 @@ import {
   getPatient,
   getState,
   getViewer,
+  getViewerAccess,
   nextId,
   updateFamilyMessage,
 } from "./store";
@@ -81,6 +84,97 @@ const optionalNumber = (value: unknown) => {
 
 const sendValidationError = (response: express.Response, message: string) => {
   response.status(400).json({ message });
+};
+
+const sendForbidden = (response: express.Response, message: string) => {
+  response.status(403).json({ message });
+};
+
+const recordAudit = (input: {
+  action:
+    | "auth_signup"
+    | "auth_login"
+    | "auth_logout"
+    | "invite_sent"
+    | "invite_accepted"
+    | "invite_resend"
+    | "invite_cancel"
+    | "profile_updated"
+    | "patient_updated"
+    | "notification_updated"
+    | "display_updated"
+    | "feedback_submitted"
+    | "export_csv"
+    | "export_documents_zip"
+    | "emergency_share_link"
+    | "emergency_share_email"
+    | "document_uploaded"
+    | "document_reprocessed"
+    | "document_deleted"
+    | "access_denied";
+  resourceType: string;
+  detail: string;
+  outcome?: "allowed" | "blocked";
+  resourceId?: string;
+  metadata?: Record<string, string | number | boolean>;
+}) => {
+  const viewer = getViewer();
+  addAuditLog({
+    id: nextId("audit"),
+    patientId: getPatient().id,
+    userId: viewer.id,
+    userName: viewer.name,
+    action: input.action,
+    resourceType: input.resourceType,
+    resourceId: input.resourceId,
+    outcome: input.outcome ?? "allowed",
+    detail: input.detail,
+    createdAt: new Date().toISOString(),
+    metadata: input.metadata,
+  });
+};
+
+const requireCapability = (
+  response: express.Response,
+  capability:
+    | "view_dashboard"
+    | "view_medications"
+    | "log_medications"
+    | "view_journal"
+    | "log_journal"
+    | "view_documents"
+    | "upload_documents"
+    | "view_appointments"
+    | "manage_appointments"
+    | "view_vitals"
+    | "log_vitals"
+    | "view_family"
+    | "manage_family"
+    | "view_tasks"
+    | "manage_tasks"
+    | "view_emergency"
+    | "share_emergency"
+    | "edit_patient"
+    | "export_data"
+    | "add_clinical_notes"
+    | "accept_invites",
+  message: string,
+) => {
+  const access = getViewerAccess();
+  if (!hasCapability(access, capability)) {
+    recordAudit({
+      action: "access_denied",
+      resourceType: "capability",
+      resourceId: capability,
+      detail: message,
+      outcome: "blocked",
+      metadata: { capability },
+    });
+    sendForbidden(response, message);
+    return false;
+  }
+
+  return true;
 };
 
 const createDocumentUrl = async (file?: Express.Multer.File) => {
@@ -186,6 +280,11 @@ export const createServer = () => {
         role: role === "family_member" || role === "doctor" || role === "admin" ? role : "caregiver",
         licenseNumber,
       });
+      recordAudit({
+        action: "auth_signup",
+        resourceType: "account",
+        detail: `Created ${role} account for ${email}.`,
+      });
       response.status(201).json({ session });
     }),
   );
@@ -202,6 +301,11 @@ export const createServer = () => {
       }
 
       const session = await authService.login(email, password);
+      recordAudit({
+        action: "auth_login",
+        resourceType: "session",
+        detail: `Signed in as ${session.viewer.email}.`,
+      });
       response.status(201).json({ session });
     }),
   );
@@ -247,6 +351,11 @@ export const createServer = () => {
   });
 
   app.post("/api/auth/logout", (_request, response) => {
+    recordAudit({
+      action: "auth_logout",
+      resourceType: "session",
+      detail: "Signed out of CareCircle.",
+    });
     response.status(204).end();
   });
 
@@ -385,12 +494,14 @@ export const createServer = () => {
   );
 
   app.get("/api/medications", (_request, response) => {
+    if (!requireCapability(response, "view_medications", "You do not have access to this medication list.")) return;
     response.json({ medications: state.medications, logs: state.medicationLogs });
   });
 
   app.post(
     "/api/medications",
     asyncHandler(async (request, response) => {
+      if (!requireCapability(response, "log_medications", "You do not have permission to add medications for this patient.")) return;
       const body = request.body as Partial<MedicationRecord>;
       const name = trimmedText(body.name);
       const doseAmount = trimmedText(body.doseAmount);
@@ -430,12 +541,19 @@ export const createServer = () => {
         actorName: "You",
         description: `added ${medication.name}`,
       });
+      recordAudit({
+        action: "profile_updated",
+        resourceType: "medication",
+        resourceId: medication.id,
+        detail: `Added medication ${medication.name}`,
+      });
       const interactions = await aiService.interactionCheck(state.medications.filter((item) => item.isActive));
       response.status(201).json({ medication, interactions });
     }),
   );
 
   app.patch("/api/medications/:id", (request, response) => {
+    if (!requireCapability(response, "log_medications", "You do not have permission to update medications.")) return;
     const medication = state.medications.find((item) => item.id === request.params.id);
     if (!medication) {
       response.status(404).json({ message: "Medication not found." });
@@ -453,26 +571,41 @@ export const createServer = () => {
     if ("name" in updates) updates.name = trimmedText(updates.name);
     if ("doseAmount" in updates) updates.doseAmount = trimmedText(updates.doseAmount);
     Object.assign(medication, updates);
+    recordAudit({
+      action: "profile_updated",
+      resourceType: "medication",
+      resourceId: medication.id,
+      detail: `Updated medication ${medication.name}`,
+    });
     response.json({ medication });
   });
 
   app.delete("/api/medications/:id", (request, response) => {
+    if (!requireCapability(response, "log_medications", "You do not have permission to delete medications.")) return;
     const index = state.medications.findIndex((item) => item.id === request.params.id);
     if (index === -1) {
       response.status(404).json({ message: "Medication not found." });
       return;
     }
     state.medications.splice(index, 1);
+    recordAudit({
+      action: "document_deleted",
+      resourceType: "medication",
+      resourceId: request.params.id,
+      detail: "Deleted a medication entry",
+    });
     response.status(204).end();
   });
 
   app.post("/api/medications/interactions", asyncHandler(async (request, response) => {
+    if (!requireCapability(response, "view_medications", "You do not have access to medication interaction checks.")) return;
     const ids = (request.body?.medicationIds ?? []) as string[];
     const selected = state.medications.filter((medication) => ids.includes(medication.id));
     response.json(await aiService.interactionCheck(selected));
   }));
 
   app.post("/api/medications/:id/log", (request, response) => {
+    if (!requireCapability(response, "log_medications", "You do not have permission to log medication doses.")) return;
     const medication = state.medications.find((item) => item.id === request.params.id);
     if (!medication) {
       response.status(404).json({ message: "Medication not found." });
@@ -499,14 +632,22 @@ export const createServer = () => {
       actorName: "You",
       description: `logged ${medication.name} as ${log.status}`,
     });
+    recordAudit({
+      action: "profile_updated",
+      resourceType: "medication_log",
+      resourceId: log.id,
+      detail: `Logged ${medication.name} as ${log.status}`,
+    });
     response.status(201).json({ log, dashboard: getDashboardSummary() });
   });
 
   app.get("/api/journal", (_request, response) => {
+    if (!requireCapability(response, "view_journal", "You do not have access to this care journal.")) return;
     response.json({ entries: state.careJournal });
   });
 
   app.post("/api/journal", asyncHandler(async (request, response) => {
+    if (!requireCapability(response, "log_journal", "You do not have permission to add care journal entries.")) return;
     const body = request.body as Partial<CareJournalRecord>;
     const date = trimmedText(body.date);
     const entryBody = trimmedText(body.entryBody);
@@ -541,14 +682,22 @@ export const createServer = () => {
       actorName: "You",
       description: "added a care journal entry",
     });
+    recordAudit({
+      action: "profile_updated",
+      resourceType: "care_journal",
+      resourceId: entry.id,
+      detail: `Added journal entry "${entry.entryTitle}"`,
+    });
     response.status(201).json({ entry });
   }));
 
   app.post("/api/journal/analyze-30-days", asyncHandler(async (_request, response) => {
+    if (!requireCapability(response, "view_journal", "You do not have access to journal analysis.")) return;
     response.json(await aiService.analyzeJournalPatterns(state.careJournal.slice(0, 30), getPatient()));
   }));
 
   app.post("/api/journal/:id/analyze", asyncHandler(async (request, response) => {
+    if (!requireCapability(response, "view_journal", "You do not have access to this journal analysis.")) return;
     const entry = state.careJournal.find((item) => item.id === request.params.id);
     if (!entry) {
       response.status(404).json({ message: "Journal entry not found." });
@@ -560,6 +709,7 @@ export const createServer = () => {
   }));
 
   app.get("/api/documents", (_request, response) => {
+    if (!requireCapability(response, "view_documents", "You do not have access to patient documents.")) return;
     response.json({ documents: state.documents });
   });
 
@@ -567,6 +717,7 @@ export const createServer = () => {
     "/api/documents/upload",
     upload.single("file"),
     asyncHandler(async (request, response) => {
+      if (!requireCapability(response, "upload_documents", "You do not have permission to upload documents.")) return;
       const extractedText = await documentService.extractText(request.file);
       const analysis = await aiService.decodeDocument(extractedText);
       const fileUrl = await createDocumentUrl(request.file);
@@ -601,6 +752,12 @@ export const createServer = () => {
         actorName: "You",
         description: "uploaded a new document",
       });
+      recordAudit({
+        action: "document_uploaded",
+        resourceType: "document",
+        resourceId: document.id,
+        detail: `Uploaded ${document.fileName}`,
+      });
 
       if (analysis.severity_flag === "urgent") {
         await emailService.send(
@@ -615,6 +772,7 @@ export const createServer = () => {
   );
 
   app.patch("/api/documents/:id", (request, response) => {
+    if (!requireCapability(response, "upload_documents", "You do not have permission to update documents.")) return;
     const document = state.documents.find((item) => item.id === request.params.id);
     if (!document) {
       response.status(404).json({ message: "Document not found." });
@@ -632,6 +790,7 @@ export const createServer = () => {
   });
 
   app.post("/api/documents/:id/reprocess", asyncHandler(async (request, response) => {
+    if (!requireCapability(response, "upload_documents", "You do not have permission to reprocess this document.")) return;
     const document = state.documents.find((item) => item.id === request.params.id);
     if (!document) {
       response.status(404).json({ message: "Document not found." });
@@ -650,11 +809,18 @@ export const createServer = () => {
     };
     document.aiActionItems = analysis.action_items;
     document.isProcessed = true;
+    recordAudit({
+      action: "document_reprocessed",
+      resourceType: "document",
+      resourceId: document.id,
+      detail: `Reprocessed ${document.fileName}`,
+    });
 
     response.json({ document });
   }));
 
   app.delete("/api/documents/:id", (request, response) => {
+    if (!requireCapability(response, "upload_documents", "You do not have permission to delete documents.")) return;
     const index = state.documents.findIndex((item) => item.id === request.params.id);
     if (index === -1) {
       response.status(404).json({ message: "Document not found." });
@@ -662,14 +828,22 @@ export const createServer = () => {
     }
 
     state.documents.splice(index, 1);
+    recordAudit({
+      action: "document_deleted",
+      resourceType: "document",
+      resourceId: request.params.id,
+      detail: "Deleted a patient document",
+    });
     response.status(204).end();
   });
 
   app.get("/api/appointments", (_request, response) => {
+    if (!requireCapability(response, "view_appointments", "You do not have access to appointments for this patient.")) return;
     response.json({ appointments: state.appointments });
   });
 
   app.post("/api/appointments", asyncHandler(async (request, response) => {
+    if (!requireCapability(response, "manage_appointments", "You do not have permission to create appointments.")) return;
     const body = request.body as Partial<AppointmentRecord>;
     const doctorName = trimmedText(body.doctorName);
     const appointmentDate = trimmedText(body.appointmentDate);
@@ -706,10 +880,17 @@ export const createServer = () => {
       actorName: "You",
       description: `scheduled ${appointment.doctorName}`,
     });
+    recordAudit({
+      action: "profile_updated",
+      resourceType: "appointment",
+      resourceId: appointment.id,
+      detail: `Created appointment with ${appointment.doctorName}`,
+    });
     response.status(201).json({ appointment });
   }));
 
   app.patch("/api/appointments/:id", (request, response) => {
+    if (!requireCapability(response, "manage_appointments", "You do not have permission to update appointments.")) return;
     const appointment = state.appointments.find((item) => item.id === request.params.id);
     if (!appointment) {
       response.status(404).json({ message: "Appointment not found." });
@@ -741,15 +922,23 @@ export const createServer = () => {
       actorName: getViewer().name.split(" ")[0],
       description: `updated ${appointment.doctorName}`,
     });
+    recordAudit({
+      action: "profile_updated",
+      resourceType: "appointment",
+      resourceId: appointment.id,
+      detail: `Updated appointment with ${appointment.doctorName}`,
+    });
 
     response.json({ appointment });
   });
 
   app.post("/api/appointments/suggest-questions", asyncHandler(async (request, response) => {
+    if (!requireCapability(response, "view_appointments", "You do not have access to appointment suggestions.")) return;
     response.json(await aiService.suggestAppointmentQuestions(getPatient(), request.body ?? {}));
   }));
 
   app.post("/api/appointments/:id/prep-summary-email", asyncHandler(async (request, response) => {
+    if (!requireCapability(response, "view_appointments", "You do not have permission to email appointment prep summaries.")) return;
     const appointment = state.appointments.find((item) => item.id === request.params.id);
     if (!appointment) {
       response.status(404).json({ message: "Appointment not found." });
@@ -780,6 +969,7 @@ export const createServer = () => {
   }));
 
   app.post("/api/appointments/:id/follow-up", asyncHandler(async (request, response) => {
+    if (!requireCapability(response, "manage_appointments", "You do not have permission to save appointment follow-up notes.")) return;
     const appointment = state.appointments.find((item) => item.id === request.params.id);
     if (!appointment) {
       response.status(404).json({ message: "Appointment not found." });
@@ -796,20 +986,29 @@ export const createServer = () => {
   }));
 
   app.delete("/api/appointments/:id", (request, response) => {
+    if (!requireCapability(response, "manage_appointments", "You do not have permission to delete appointments.")) return;
     const index = state.appointments.findIndex((item) => item.id === request.params.id);
     if (index === -1) {
       response.status(404).json({ message: "Appointment not found." });
       return;
     }
     state.appointments.splice(index, 1);
+    recordAudit({
+      action: "profile_updated",
+      resourceType: "appointment",
+      resourceId: request.params.id,
+      detail: "Deleted an appointment",
+    });
     response.status(204).end();
   });
 
   app.get("/api/vitals", (_request, response) => {
+    if (!requireCapability(response, "view_vitals", "You do not have access to health vitals for this patient.")) return;
     response.json({ vitals: state.healthVitals });
   });
 
   app.post("/api/vitals", (request, response) => {
+    if (!requireCapability(response, "log_vitals", "You do not have permission to log vitals.")) return;
     const body = request.body as Partial<HealthVitalsRecord>;
     const date = trimmedText(body.date);
     const notes = trimmedText(body.notes);
@@ -847,14 +1046,22 @@ export const createServer = () => {
       actorName: "You",
       description: "logged new vitals",
     });
+    recordAudit({
+      action: "profile_updated",
+      resourceType: "health_vital",
+      resourceId: vital.id,
+      detail: "Logged vital signs",
+    });
     response.status(201).json({ vital });
   });
 
   app.post("/api/vitals/analyze", asyncHandler(async (_request, response) => {
+    if (!requireCapability(response, "view_vitals", "You do not have access to vitals analysis.")) return;
     response.json(await aiService.analyzeVitals(state.healthVitals.slice(0, 30), getPatient()));
   }));
 
   app.get("/api/family", (_request, response) => {
+    if (!requireCapability(response, "view_family", "You do not have access to the family hub.")) return;
     response.json({
       familyMembers: state.familyMembers,
       feed: state.activityEvents,
@@ -864,6 +1071,7 @@ export const createServer = () => {
   });
 
   app.post("/api/family/invite", asyncHandler(async (request, response) => {
+    if (!requireCapability(response, "manage_family", "You do not have permission to invite family members.")) return;
     const body = request.body as { name?: string; email: string; relationship?: string; role?: FamilyMemberRecord["role"] };
     const email = trimmedText(body.email);
     if (!hasText(email)) {
@@ -890,11 +1098,55 @@ export const createServer = () => {
       actorName: "You",
       description: `invited ${invite.name} to CareCircle`,
     });
+    recordAudit({
+      action: "invite_sent",
+      resourceType: "family_member",
+      resourceId: invite.id,
+      detail: `Invited ${invite.email}`,
+    });
     await emailService.send(invite.email, "You have been invited to CareCircle AI", `<p>${getViewer().name} invited you to help care for ${getPatient().name}.</p>`);
     response.status(201).json({ invite });
   }));
 
+  app.post("/api/family/invite/:token/accept", (request, response) => {
+    const invite = state.familyMembers.find((member) => member.inviteToken === request.params.token);
+    if (!invite) {
+      response.status(404).json({ message: "Invite not found." });
+      return;
+    }
+
+    const viewer = getViewer();
+    if (invite.email.toLowerCase() !== viewer.email.toLowerCase()) {
+      response.status(403).json({ message: "Please sign in with the invited email address to accept this invite." });
+      return;
+    }
+
+    if (invite.joinStatus === "active" && invite.userId === viewer.id) {
+      response.json({ invite });
+      return;
+    }
+
+    invite.joinStatus = "active";
+    invite.userId = viewer.id;
+    invite.lastActive = new Date().toISOString();
+    invite.acceptedAt = new Date().toISOString();
+    addAuditLog({
+      id: nextId("audit"),
+      patientId: getPatient().id,
+      userId: viewer.id,
+      userName: viewer.name,
+      action: "invite_accepted",
+      resourceType: "family_member",
+      resourceId: invite.id,
+      outcome: "allowed",
+      detail: `Accepted invite for ${invite.email}`,
+      createdAt: new Date().toISOString(),
+    });
+    response.json({ invite });
+  });
+
   app.post("/api/family/invite/:id/resend", asyncHandler(async (request, response) => {
+    if (!requireCapability(response, "manage_family", "You do not have permission to resend invites.")) return;
     const invite = state.familyMembers.find((member) => member.id === request.params.id);
     if (!invite) {
       response.status(404).json({ message: "Invite not found." });
@@ -902,11 +1154,18 @@ export const createServer = () => {
     }
 
     invite.createdAt = new Date().toISOString();
+    recordAudit({
+      action: "invite_resend",
+      resourceType: "family_member",
+      resourceId: invite.id,
+      detail: `Resent invite to ${invite.email}`,
+    });
     await emailService.send(invite.email, "Your CareCircle invite was resent", `<p>${getViewer().name} resent your invite to help care for ${getPatient().name}.</p>`);
     response.json({ invite });
   }));
 
   app.delete("/api/family/invite/:id", (request, response) => {
+    if (!requireCapability(response, "manage_family", "You do not have permission to cancel invites.")) return;
     const index = state.familyMembers.findIndex((member) => member.id === request.params.id && member.joinStatus === "pending");
     if (index === -1) {
       response.status(404).json({ message: "Pending invite not found." });
@@ -914,10 +1173,17 @@ export const createServer = () => {
     }
 
     state.familyMembers.splice(index, 1);
+    recordAudit({
+      action: "invite_cancel",
+      resourceType: "family_member",
+      resourceId: request.params.id,
+      detail: "Cancelled a pending family invite",
+    });
     response.status(204).end();
   });
 
   app.delete("/api/family/members/:id", (request, response) => {
+    if (!requireCapability(response, "manage_family", "You do not have permission to remove family members.")) return;
     const index = state.familyMembers.findIndex((member) => member.id === request.params.id);
     if (index === -1) {
       response.status(404).json({ message: "Family member not found." });
@@ -925,10 +1191,17 @@ export const createServer = () => {
     }
 
     state.familyMembers.splice(index, 1);
+    recordAudit({
+      action: "invite_cancel",
+      resourceType: "family_member",
+      resourceId: request.params.id,
+      detail: "Removed a family member from the patient roster",
+    });
     response.status(204).end();
   });
 
   app.post("/api/family/feed/:id/reactions", (request, response) => {
+    if (!requireCapability(response, "view_family", "You do not have permission to react to family updates.")) return;
     const event = state.activityEvents.find((item) => item.id === request.params.id);
     if (!event) {
       response.status(404).json({ message: "Activity event not found." });
@@ -946,6 +1219,7 @@ export const createServer = () => {
   });
 
   app.get("/api/family/messages", (_request, response) => {
+    if (!requireCapability(response, "view_family", "You do not have access to the family chat.")) return;
     response.json({
       messages: getFamilyMessages(),
       typing: [],
@@ -953,6 +1227,7 @@ export const createServer = () => {
   });
 
   app.post("/api/family/messages", (request, response) => {
+    if (!requireCapability(response, "view_family", "You do not have permission to send family messages.")) return;
     const messageText = trimmedText(request.body?.content ?? request.body?.messageText);
     if (!hasText(messageText)) {
       sendValidationError(response, "Please write a message before sending it.");
@@ -976,10 +1251,17 @@ export const createServer = () => {
       actorName: getViewer().name.split(" ")[0],
       description: "sent a family message",
     });
+    recordAudit({
+      action: "profile_updated",
+      resourceType: "family_message",
+      resourceId: message.id,
+      detail: "Sent a family chat message",
+    });
     response.status(201).json({ message });
   });
 
   app.patch("/api/family/messages/:id/pin", (request, response) => {
+    if (!requireCapability(response, "view_family", "You do not have permission to pin family messages.")) return;
     const message = updateFamilyMessage(request.params.id, {
       isPinned: request.body?.isPinned ?? true,
     });
@@ -992,10 +1274,12 @@ export const createServer = () => {
   });
 
   app.get("/api/tasks", (_request, response) => {
+    if (!requireCapability(response, "view_tasks", "You do not have access to the care board.")) return;
     response.json({ tasks: state.tasks });
   });
 
   app.post("/api/tasks", (request, response) => {
+    if (!requireCapability(response, "manage_tasks", "You do not have permission to create tasks.")) return;
     const body = request.body as Partial<TaskRecord>;
     const title = trimmedText(body.title);
     const dueDate = trimmedText(body.dueDate);
@@ -1028,10 +1312,17 @@ export const createServer = () => {
       actorName: getViewer().name.split(" ")[0],
       description: `added "${task.title}" to the care board`,
     });
+    recordAudit({
+      action: "profile_updated",
+      resourceType: "task",
+      resourceId: task.id,
+      detail: `Created task "${task.title}"`,
+    });
     response.status(201).json({ task });
   });
 
   app.patch("/api/tasks/:id", (request, response) => {
+    if (!requireCapability(response, "manage_tasks", "You do not have permission to update tasks.")) return;
     const task = state.tasks.find((item) => item.id === request.params.id);
     if (!task) {
       response.status(404).json({ message: "Task not found." });
@@ -1066,28 +1357,44 @@ export const createServer = () => {
         description: `moved "${task.title}" to ${task.status.replaceAll("_", " ")}`,
       });
     }
+    recordAudit({
+      action: "profile_updated",
+      resourceType: "task",
+      resourceId: task.id,
+      detail: `Updated task "${task.title}"`,
+    });
     response.json({ task });
   });
 
   app.delete("/api/tasks/:id", (request, response) => {
+    if (!requireCapability(response, "manage_tasks", "You do not have permission to delete tasks.")) return;
     const index = state.tasks.findIndex((item) => item.id === request.params.id);
     if (index === -1) {
       response.status(404).json({ message: "Task not found." });
       return;
     }
     state.tasks.splice(index, 1);
+    recordAudit({
+      action: "profile_updated",
+      resourceType: "task",
+      resourceId: request.params.id,
+      detail: "Deleted a task",
+    });
     response.status(204).end();
   });
 
   app.post("/api/tasks/suggestions", asyncHandler(async (_request, response) => {
+    if (!requireCapability(response, "manage_tasks", "You do not have access to task suggestions.")) return;
     response.json(await aiService.suggestTasks(getPatient()));
   }));
 
   app.get("/api/emergency", (_request, response) => {
+    if (!requireCapability(response, "view_emergency", "You do not have access to emergency tools.")) return;
     response.json({ protocols: state.emergencyProtocols, patient: getPatient() });
   });
 
   app.get("/api/emergency/patient-card", (_request, response) => {
+    if (!requireCapability(response, "view_emergency", "You do not have permission to view the emergency patient card.")) return;
     response.json({
       patient: getPatient(),
       medications: state.medications.filter((item) => item.isActive),
@@ -1096,12 +1403,14 @@ export const createServer = () => {
   });
 
   app.post("/api/emergency/generate", asyncHandler(async (_request, response) => {
+    if (!requireCapability(response, "share_emergency", "You do not have permission to regenerate emergency protocols.")) return;
     const result = await aiService.generateEmergencyProtocols(getPatient(), state.medications.filter((item) => item.isActive));
     state.emergencyProtocols = result.protocols;
     response.json(result);
   }));
 
   app.post("/api/emergency/share-link", (request, response) => {
+    if (!requireCapability(response, "share_emergency", "You do not have permission to create public emergency links.")) return;
     const protocolId = trimmedText(request.body?.protocolId);
     const protocol =
       state.emergencyProtocols.find((item) => item.id === protocolId) ?? state.emergencyProtocols[0];
@@ -1110,6 +1419,12 @@ export const createServer = () => {
       return;
     }
 
+    recordAudit({
+      action: "emergency_share_link",
+      resourceType: "emergency_protocol",
+      resourceId: protocol.id,
+      detail: `Created emergency share link for ${protocol.title}`,
+    });
     response.json({
       url: `${env.backendUrl}/api/public/emergency/${protocol.shareToken}`,
       protocol,
@@ -1117,6 +1432,7 @@ export const createServer = () => {
   });
 
   app.post("/api/emergency/share-email", asyncHandler(async (request, response) => {
+    if (!requireCapability(response, "share_emergency", "You do not have permission to email emergency information.")) return;
     const selectedIds = Array.isArray(request.body?.familyMemberIds) ? request.body.familyMemberIds : [];
     const recipients = state.familyMembers.filter((member) => selectedIds.includes(member.id));
     if (!recipients.length) {
@@ -1139,10 +1455,17 @@ export const createServer = () => {
       },
     );
 
+    recordAudit({
+      action: "emergency_share_email",
+      resourceType: "emergency_protocol",
+      detail: `Shared emergency information with ${recipients.length} family members`,
+    });
+
     response.status(201).json({ sent: recipients.length });
   }));
 
   app.get("/api/emergency/card/pdf", (_request, response) => {
+    if (!requireCapability(response, "view_emergency", "You do not have permission to download the emergency card.")) return;
     const buffer = exportService.buildEmergencyCardPdf(getPatient(), state.medications.filter((item) => item.isActive));
     response.setHeader("Content-Type", "application/pdf");
     response.setHeader("Content-Disposition", 'attachment; filename="carecircle-emergency-card.pdf"');
@@ -1150,6 +1473,7 @@ export const createServer = () => {
   });
 
   app.get("/api/emergency/:id/pdf", (request, response) => {
+    if (!requireCapability(response, "view_emergency", "You do not have permission to download this emergency protocol.")) return;
     const protocol = state.emergencyProtocols.find((item) => item.id === request.params.id);
     if (!protocol) {
       response.status(404).json({ message: "Emergency protocol not found." });
@@ -1171,10 +1495,12 @@ export const createServer = () => {
   });
 
   app.get("/api/care-chat/sessions", (_request, response) => {
+    if (!requireCapability(response, "view_dashboard", "You do not have access to CareCircle AI chat.")) return;
     response.json({ sessions: state.chatSessions, messages: state.chatMessages });
   });
 
   app.post("/api/care-chat/sessions", (request, response) => {
+    if (!requireCapability(response, "view_dashboard", "You do not have access to CareCircle AI chat.")) return;
     const title = String(request.body?.title ?? "New Conversation");
     const session = {
       id: nextId("chat_session"),
@@ -1189,10 +1515,12 @@ export const createServer = () => {
   });
 
   app.get("/api/care-chat/sessions/:id/messages", (request, response) => {
+    if (!requireCapability(response, "view_dashboard", "You do not have access to CareCircle AI chat.")) return;
     response.json({ messages: state.chatMessages.filter((message) => message.sessionId === request.params.id) });
   });
 
   app.post("/api/care-chat/sessions/:id/messages", asyncHandler(async (request, response) => {
+    if (!requireCapability(response, "view_dashboard", "You do not have access to CareCircle AI chat.")) return;
     const session = state.chatSessions.find((item) => item.id === request.params.id);
     if (!session) {
       response.status(404).json({ message: "Chat session not found." });
@@ -1238,6 +1566,7 @@ export const createServer = () => {
   }));
 
   app.post("/api/care-chat/emotional-checkin", asyncHandler(async (request, response) => {
+    if (!requireCapability(response, "view_dashboard", "You do not have access to CareCircle AI chat.")) return;
     const feeling = String(request.body?.feeling ?? "");
     const reply = await aiService.emotionalCheckInReply(feeling);
     response.json({ reply });
@@ -1249,6 +1578,7 @@ export const createServer = () => {
       patient: getPatient(),
       settings: state.settings.find((item) => item.userId === getViewer().id),
       notifications: state.notifications,
+      securityAuditLogs: state.securityAuditLogs.slice(0, 25),
     });
   });
 
@@ -1276,6 +1606,12 @@ export const createServer = () => {
       current.updatedAt = new Date().toISOString();
     }
 
+    recordAudit({
+      action: "profile_updated",
+      resourceType: "profile",
+      resourceId: viewer.id,
+      detail: "Updated caregiver profile",
+    });
     response.json({ viewer, updatedAt: current?.updatedAt ?? new Date().toISOString() });
   }));
 
@@ -1298,6 +1634,12 @@ export const createServer = () => {
 
     const confirmUrl = `${env.frontendUrl}/settings?confirmEmail=${encodeURIComponent(token)}`;
     await emailService.send(email, "Confirm your CareCircle email change", `<p>Tap below to confirm your new CareCircle email address.</p><p><a href="${confirmUrl}">${confirmUrl}</a></p>`);
+    recordAudit({
+      action: "profile_updated",
+      resourceType: "profile",
+      resourceId: getViewer().id,
+      detail: `Requested email change to ${email}`,
+    });
     response.status(201).json({ message: `We sent a confirmation link to ${email}.` });
   }));
 
@@ -1317,10 +1659,17 @@ export const createServer = () => {
     pending.confirmedAt = new Date().toISOString();
     const viewer = getViewer();
     viewer.email = pending.nextEmail;
+    recordAudit({
+      action: "profile_updated",
+      resourceType: "profile",
+      resourceId: viewer.id,
+      detail: `Confirmed email change to ${pending.nextEmail}`,
+    });
     response.json({ viewer });
   });
 
   app.put("/api/settings/patient", (request, response) => {
+    if (!requireCapability(response, "edit_patient", "You do not have permission to update the patient profile.")) return;
     const patient = getPatient();
     const name = trimmedText(request.body?.name);
     if (!hasText(name)) {
@@ -1349,6 +1698,12 @@ export const createServer = () => {
       actorName: getViewer().name.split(" ")[0],
       description: "updated the patient profile",
     });
+    recordAudit({
+      action: "patient_updated",
+      resourceType: "patient",
+      resourceId: patient.id,
+      detail: `Updated patient profile for ${patient.name}`,
+    });
 
     response.json({ patient });
   });
@@ -1359,6 +1714,12 @@ export const createServer = () => {
       ...viewer.notificationPreferences,
       ...request.body,
     };
+    recordAudit({
+      action: "notification_updated",
+      resourceType: "notification_preferences",
+      resourceId: viewer.id,
+      detail: "Updated notification settings",
+    });
     response.json({ notificationPreferences: viewer.notificationPreferences });
   });
 
@@ -1371,6 +1732,12 @@ export const createServer = () => {
       };
       current.updatedAt = new Date().toISOString();
     }
+    recordAudit({
+      action: "display_updated",
+      resourceType: "display_preferences",
+      resourceId: getViewer().id,
+      detail: "Updated display settings",
+    });
     response.json({ settings: current });
   });
 
@@ -1410,6 +1777,13 @@ export const createServer = () => {
       createdAt: new Date().toISOString(),
     });
 
+    recordAudit({
+      action: "feedback_submitted",
+      resourceType: "feedback",
+      resourceId: feedback.id,
+      detail: `Submitted ${feedback.subject} feedback`,
+    });
+
     response.status(201).json({ feedback });
   });
 
@@ -1424,6 +1798,7 @@ export const createServer = () => {
   });
 
   app.get("/api/settings/export/csv", (_request, response) => {
+    if (!requireCapability(response, "export_data", "You do not have permission to export patient data.")) return;
     const csv = exportService.buildCsv(
       [
         ...state.tasks.map((task) => ({
@@ -1448,17 +1823,36 @@ export const createServer = () => {
     );
     response.setHeader("Content-Type", "text/csv");
     response.setHeader("Content-Disposition", `attachment; filename="CareCircle_Export_${new Date().toISOString().slice(0, 10)}.csv"`);
+    recordAudit({
+      action: "export_csv",
+      resourceType: "export",
+      resourceId: getViewer().id,
+      detail: "Exported patient data as CSV",
+    });
     response.send(csv);
   });
 
   app.get("/api/settings/export/documents.zip", asyncHandler(async (_request, response) => {
+    if (!requireCapability(response, "export_data", "You do not have permission to export patient documents.")) return;
     const zipBuffer = await exportService.buildDocumentsZip(state.documents);
     response.setHeader("Content-Type", "application/zip");
     response.setHeader("Content-Disposition", `attachment; filename="CareCircle_Documents_${new Date().toISOString().slice(0, 10)}.zip"`);
+    recordAudit({
+      action: "export_documents_zip",
+      resourceType: "export",
+      resourceId: getViewer().id,
+      detail: "Exported patient documents as ZIP",
+    });
     response.send(zipBuffer);
   }));
 
   app.delete("/api/settings/account", (_request, response) => {
+    recordAudit({
+      action: "auth_logout",
+      resourceType: "account",
+      resourceId: getViewer().id,
+      detail: "Deleted the active account from this demo session",
+    });
     response.status(204).end();
   });
 

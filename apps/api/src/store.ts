@@ -1,11 +1,13 @@
 import {
   buildDemoSnapshot,
+  type PatientAccessRecord,
   type AppSnapshot,
   type BootstrapPayload,
   type DashboardSummary,
   type FamilyMessageRecord,
   type FeedbackRecord,
   type PendingEmailUpdateRecord,
+  type SecurityAuditRecord,
 } from "@carecircle/shared";
 
 let state = buildDemoSnapshot();
@@ -80,6 +82,13 @@ export const getViewer = () => {
 
 export const getViewerById = (userId: string) => state.users.find((user) => user.id === userId);
 
+export const getViewerAccess = (): PatientAccessRecord | null =>
+  state.patientAccess.find(
+    (record) => record.patientId === state.activePatientId && record.userId === state.activeUserId && record.joinStatus === "active",
+  ) ?? null;
+
+export const getViewerCapabilities = () => getViewerAccess()?.capabilities ?? [];
+
 export const setActiveUser = (userId: string) => {
   state.activeUserId = userId;
   return getViewer();
@@ -134,10 +143,14 @@ export const getDashboardSummary = (): DashboardSummary => {
 export const getBootstrapPayload = (): BootstrapPayload => ({
   viewer: getViewer(),
   patient: getPatient(),
+  viewerAccess: getViewerAccess(),
+  patientAccess: state.patientAccess,
+  capabilities: getViewerCapabilities(),
   dashboard: getDashboardSummary(),
   data: {
     users: state.users,
     patients: state.patients,
+    patientAccess: state.patientAccess,
     medications: state.medications,
     medicationLogs: state.medicationLogs,
     careJournal: state.careJournal,
@@ -155,6 +168,7 @@ export const getBootstrapPayload = (): BootstrapPayload => ({
     activityEvents: state.activityEvents,
     activityReactions: state.activityReactions,
     settings: state.settings,
+    securityAuditLogs: state.securityAuditLogs,
   },
 });
 
@@ -185,6 +199,11 @@ export const addFeedbackRecord = (feedback: FeedbackRecord) => {
 
 export const addPendingEmailUpdate = (record: PendingEmailUpdateRecord) => {
   pendingEmailUpdates.unshift(record);
+  return record;
+};
+
+export const addAuditLog = (record: SecurityAuditRecord) => {
+  state.securityAuditLogs.unshift(record);
   return record;
 };
 

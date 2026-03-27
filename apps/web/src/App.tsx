@@ -13,6 +13,7 @@ const SignupPage = lazy(async () => ({ default: (await import("@/pages/SignupPag
 const ForgotPasswordPage = lazy(async () => ({ default: (await import("@/pages/ForgotPasswordPage")).ForgotPasswordPage }));
 const ResetPasswordPage = lazy(async () => ({ default: (await import("@/pages/ResetPasswordPage")).ResetPasswordPage }));
 const AuthCallbackPage = lazy(async () => ({ default: (await import("@/pages/AuthCallbackPage")).AuthCallbackPage }));
+const InviteAcceptancePage = lazy(async () => ({ default: (await import("@/pages/InviteAcceptancePage")).InviteAcceptancePage }));
 const FamilyHomePage = lazy(async () => ({ default: (await import("@/pages/FamilyHomePage")).FamilyHomePage }));
 const DoctorHomePage = lazy(async () => ({ default: (await import("@/pages/DoctorHomePage")).DoctorHomePage }));
 const MedicationsPage = lazy(async () => ({ default: (await import("@/pages/MedicationsPage")).MedicationsPage }));
@@ -106,6 +107,14 @@ const App = () => {
         element={(
           <LazyPage>
             <AuthCallbackPage />
+          </LazyPage>
+        )}
+      />
+      <Route
+        path="/invite/:token"
+        element={(
+          <LazyPage>
+            <InviteAcceptancePage />
           </LazyPage>
         )}
       />

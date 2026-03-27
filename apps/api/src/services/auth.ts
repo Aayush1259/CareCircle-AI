@@ -1,6 +1,16 @@
 import crypto from "node:crypto";
 import jwt from "jsonwebtoken";
-import type { AuthSession, NotificationPreferences, UserRecord, UserRole } from "@carecircle/shared";
+import type {
+  AppSettingsRecord,
+  AuthSession,
+  FamilyMemberRecord,
+  NotificationPreferences,
+  PatientAccessRecord,
+  PatientAccessRole,
+  UserRecord,
+  UserRole,
+} from "@carecircle/shared";
+import { buildPatientAccessRecord } from "@carecircle/shared";
 import { env, featureFlags } from "../env";
 import { getPatient, getState, getViewer, getViewerById, nextId, setActiveUser } from "../store";
 import { emailService } from "./email";
@@ -56,8 +66,131 @@ const setLocalPassword = (email: string, password: string) => {
   localPasswords.set(normalizeEmail(email), password);
 };
 
+const resolveAccessRole = (role: UserRole): PatientAccessRole => {
+  if (role === "doctor") return "doctor";
+  if (role === "admin" || role === "caregiver") return "primary_caregiver";
+  return "family";
+};
+
+const resolveAccessLevel = (role: UserRole): PatientAccessRecord["accessLevel"] => {
+  if (role === "doctor") return "clinical_access";
+  if (role === "admin" || role === "caregiver") return "full_access";
+  return "can_log";
+};
+
+const buildDefaultSettings = (viewer: UserRecord): AppSettingsRecord => ({
+  userId: viewer.id,
+  display: {
+    fontSize: "normal",
+    colorTheme: "teal",
+    dashboardLayout: "detailed",
+    highContrast: false,
+  },
+  updatedAt: new Date().toISOString(),
+  helpLinks: [
+    { title: "How to use the dashboard", url: "https://www.loom.com/share/carecircle-dashboard" },
+    { title: "Uploading a document", url: "https://www.loom.com/share/carecircle-documents" },
+    { title: "Inviting family members", url: "https://www.loom.com/share/carecircle-family" },
+  ],
+});
+
+const syncViewerWorkspace = (viewer: UserRecord) => {
+  const state = getState();
+  const patient = getPatient();
+  const accessRole = resolveAccessRole(viewer.role);
+  const accessLevel = resolveAccessLevel(viewer.role);
+
+  let access = state.patientAccess.find(
+    (record) => record.patientId === patient.id && record.userId === viewer.id,
+  );
+
+  if (access) {
+    access.email = viewer.email;
+    access.name = viewer.name;
+    access.accessRole = accessRole;
+    access.accessLevel = accessLevel;
+    access.capabilities = buildPatientAccessRecord({
+      id: access.id,
+      patientId: access.patientId,
+      userId: viewer.id,
+      email: viewer.email,
+      name: viewer.name,
+      accessRole,
+      accessLevel,
+      invitedBy: access.invitedBy,
+      joinStatus: access.joinStatus,
+      inviteToken: access.inviteToken,
+      createdAt: access.createdAt,
+      updatedAt: new Date().toISOString(),
+      acceptedAt: access.acceptedAt,
+      lastActive: new Date().toISOString(),
+    }).capabilities;
+    access.updatedAt = new Date().toISOString();
+    access.lastActive = new Date().toISOString();
+  } else {
+    access = buildPatientAccessRecord({
+      id: nextId("access"),
+      patientId: patient.id,
+      userId: viewer.id,
+      email: viewer.email,
+      name: viewer.name,
+      accessRole,
+      accessLevel,
+      invitedBy: patient.userId,
+      joinStatus: "active",
+      inviteToken: nextId("invite"),
+      createdAt: new Date().toISOString(),
+      acceptedAt: new Date().toISOString(),
+      lastActive: new Date().toISOString(),
+    });
+    state.patientAccess.unshift(access);
+  }
+
+  if (!state.settings.some((item) => item.userId === viewer.id)) {
+    state.settings.unshift(buildDefaultSettings(viewer));
+  }
+
+  if (viewer.role !== "doctor") {
+    const familyRole: FamilyMemberRecord["role"] =
+      viewer.role === "caregiver" || viewer.role === "admin" ? "primary_caregiver" : "family";
+    const permissions: FamilyMemberRecord["permissions"] =
+      viewer.role === "caregiver" || viewer.role === "admin" ? "full_access" : "can_log";
+    const existingFamily = state.familyMembers.find((member) => member.userId === viewer.id || member.email.toLowerCase() === viewer.email.toLowerCase());
+    if (existingFamily) {
+      existingFamily.userId = viewer.id;
+      existingFamily.name = viewer.name;
+      existingFamily.email = viewer.email;
+      existingFamily.role = familyRole;
+      existingFamily.permissions = permissions;
+      existingFamily.joinStatus = "active";
+      existingFamily.lastActive = new Date().toISOString();
+      existingFamily.acceptedAt = existingFamily.acceptedAt ?? new Date().toISOString();
+    } else {
+      state.familyMembers.unshift({
+        id: nextId("family"),
+        patientId: patient.id,
+        invitedBy: patient.userId,
+        userId: viewer.id,
+        name: viewer.name,
+        email: viewer.email,
+        relationship: familyRole === "primary_caregiver" ? "Primary caregiver" : "Family member",
+        role: familyRole,
+        permissions,
+        joinStatus: "active",
+        inviteToken: nextId("invite"),
+        createdAt: new Date().toISOString(),
+        acceptedAt: new Date().toISOString(),
+        lastActive: new Date().toISOString(),
+      });
+    }
+  }
+
+  return access;
+};
+
 const buildSession = (viewer: UserRecord, mode: "demo" | "supabase"): AuthSession => {
   setActiveUser(viewer.id);
+  const access = syncViewerWorkspace(viewer);
   const expiresAt = new Date(Date.now() + sessionDurationMs).toISOString();
   const token = jwt.sign({ viewerId: viewer.id, mode }, env.jwtSecret, {
     expiresIn: "7d",
@@ -66,6 +199,8 @@ const buildSession = (viewer: UserRecord, mode: "demo" | "supabase"): AuthSessio
     token,
     viewer,
     patient: getPatient(),
+    access,
+    capabilities: access.capabilities,
     mode,
     expiresAt,
   };

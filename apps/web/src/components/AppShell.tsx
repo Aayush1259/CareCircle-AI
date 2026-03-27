@@ -52,6 +52,7 @@ const familyNavigation = [
 const doctorNavigation = [
   { to: "/doctor-home", label: "Home", icon: Home },
   { to: "/journal", label: "Care Journal", icon: BookHeart },
+  { to: "/documents", label: "Documents", icon: FileText },
   { to: "/vitals", label: "Health Vitals", icon: HeartPulse },
   { to: "/appointments", label: "Appointments", icon: CalendarDays },
   { to: "/emergency", label: "Emergency", icon: ShieldAlert },

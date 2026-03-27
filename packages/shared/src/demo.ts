@@ -16,10 +16,13 @@ import type {
   MedicationLogRecord,
   MedicationRecord,
   NotificationRecord,
+  PatientAccessRecord,
   PatientRecord,
+  SecurityAuditRecord,
   TaskRecord,
   UserRecord,
 } from "./types";
+import { buildPatientAccessRecord } from "./access";
 
 const now = new Date();
 
@@ -95,6 +98,18 @@ export const buildDemoSnapshot = (): AppSnapshot => {
       phone: "(555) 234-5678",
       createdAt: isoDateTime(-80, 10),
       lastLogin: isoDateTime(-2, 14, 15),
+      notificationPreferences: viewer.notificationPreferences,
+    },
+    {
+      id: "user_hannah",
+      authUserId: "auth_demo_hannah",
+      email: "hannah@carecircle.ai",
+      name: "Dr. Hannah Scott",
+      role: "doctor",
+      licenseNumber: "MED-91542",
+      phone: "(555) 900-2222",
+      createdAt: isoDateTime(-79, 13),
+      lastLogin: isoDateTime(-3, 9, 45),
       notificationPreferences: viewer.notificationPreferences,
     },
   ];
@@ -351,7 +366,7 @@ export const buildDemoSnapshot = (): AppSnapshot => {
 
   const familyMemberSeeds: Array<{
     id: string;
-    userId: string;
+    userId?: string;
     name: string;
     email: string;
     phone: string;
@@ -363,6 +378,7 @@ export const buildDemoSnapshot = (): AppSnapshot => {
     { id: "family_001", userId: viewer.id, name: "Sarah", email: "demo@carecircle.ai", phone: "(555) 111-2233", relationship: "Daughter", role: "primary_caregiver", permissions: "full_access", lastActive: isoDateTime(0, 7, 45) },
     { id: "family_002", userId: "user_james", name: "James", email: "james@carecircle.ai", phone: "(555) 333-8899", relationship: "Son", role: "secondary_caregiver", permissions: "can_log", lastActive: isoDateTime(-1, 18, 12) },
     { id: "family_003", userId: "user_maria", name: "Maria", email: "maria@carecircle.ai", phone: "(555) 777-4455", relationship: "Home health aide", role: "family", permissions: "can_log", lastActive: isoDateTime(-1, 9, 5) },
+    { id: "family_004", name: "Alyssa", email: "alyssa@carecircle.ai", phone: "(555) 222-3344", relationship: "Granddaughter", role: "family", permissions: "view_only", lastActive: isoDateTime(-1, 14, 30) },
   ];
 
   const familyMembers: FamilyMemberRecord[] = familyMemberSeeds.map(({ id, userId, name, email, phone, relationship, role, permissions, lastActive }, index) => ({
@@ -381,6 +397,97 @@ export const buildDemoSnapshot = (): AppSnapshot => {
     createdAt: isoDateTime(-90 + index * 15, 12),
     lastActive,
   }));
+
+  const patientAccess: PatientAccessRecord[] = [
+    buildPatientAccessRecord({
+      id: "access_001",
+      patientId: patient.id,
+      userId: viewer.id,
+      email: viewer.email,
+      name: viewer.name,
+      accessRole: "primary_caregiver",
+      accessLevel: "full_access",
+      invitedBy: viewer.id,
+      joinStatus: "active",
+      inviteToken: "invite_001",
+      createdAt: isoDateTime(-90, 8),
+      acceptedAt: isoDateTime(-90, 8, 15),
+      lastActive: isoDateTime(0, 7, 45),
+    }),
+    buildPatientAccessRecord({
+      id: "access_002",
+      patientId: patient.id,
+      userId: "user_james",
+      email: "james@carecircle.ai",
+      name: "James Martinez",
+      accessRole: "secondary_caregiver",
+      accessLevel: "can_log",
+      invitedBy: viewer.id,
+      joinStatus: "active",
+      inviteToken: "invite_002",
+      createdAt: isoDateTime(-75, 11),
+      acceptedAt: isoDateTime(-74, 8, 30),
+      lastActive: isoDateTime(-1, 18, 12),
+    }),
+    buildPatientAccessRecord({
+      id: "access_003",
+      patientId: patient.id,
+      userId: "user_maria",
+      email: "maria@carecircle.ai",
+      name: "Maria Lopez",
+      accessRole: "family",
+      accessLevel: "can_log",
+      invitedBy: viewer.id,
+      joinStatus: "active",
+      inviteToken: "invite_003",
+      createdAt: isoDateTime(-60, 13),
+      acceptedAt: isoDateTime(-59, 9, 10),
+      lastActive: isoDateTime(-1, 9, 5),
+    }),
+    buildPatientAccessRecord({
+      id: "access_004",
+      patientId: patient.id,
+      userId: "user_doctor",
+      email: "doctor@carecircle.ai",
+      name: "Dr. Robert Chen",
+      accessRole: "doctor",
+      accessLevel: "clinical_access",
+      invitedBy: viewer.id,
+      joinStatus: "active",
+      inviteToken: "invite_004",
+      createdAt: isoDateTime(-80, 10),
+      acceptedAt: isoDateTime(-79, 15, 0),
+      lastActive: isoDateTime(-2, 14, 15),
+    }),
+    buildPatientAccessRecord({
+      id: "access_005",
+      patientId: patient.id,
+      userId: "user_hannah",
+      email: "hannah@carecircle.ai",
+      name: "Dr. Hannah Scott",
+      accessRole: "doctor",
+      accessLevel: "clinical_access",
+      invitedBy: viewer.id,
+      joinStatus: "active",
+      inviteToken: "invite_005",
+      createdAt: isoDateTime(-78, 13),
+      acceptedAt: isoDateTime(-76, 8, 45),
+      lastActive: isoDateTime(-3, 9, 45),
+    }),
+    buildPatientAccessRecord({
+      id: "access_006",
+      patientId: patient.id,
+      email: "alyssa@carecircle.ai",
+      name: "Alyssa",
+      accessRole: "family",
+      accessLevel: "view_only",
+      invitedBy: viewer.id,
+      joinStatus: "pending",
+      inviteToken: "invite_006",
+      createdAt: isoDateTime(-1, 14, 30),
+      updatedAt: isoDateTime(-1, 14, 35),
+    }),
+  ];
 
   const taskSeeds: Array<{
     createdBy: string;
@@ -624,6 +731,66 @@ export const buildDemoSnapshot = (): AppSnapshot => {
     { id: uid("reaction", 2), eventId: uid("activity", 3), userId: "user_james", emoji: "thanks", createdAt: isoDateTime(-1, 21, 10) },
   ];
 
+  const securityAuditLogs: SecurityAuditRecord[] = [
+    {
+      id: uid("audit", 1),
+      patientId: patient.id,
+      userId: viewer.id,
+      userName: viewer.name,
+      action: "auth_login",
+      resourceType: "session",
+      outcome: "allowed",
+      detail: "Signed in to CareCircle and loaded the patient workspace.",
+      createdAt: isoDateTime(0, 7, 45),
+    },
+    {
+      id: uid("audit", 2),
+      patientId: patient.id,
+      userId: viewer.id,
+      userName: viewer.name,
+      action: "invite_sent",
+      resourceType: "patient_access",
+      resourceId: "family_004",
+      outcome: "allowed",
+      detail: "Sent a family invite to Alyssa.",
+      createdAt: isoDateTime(-1, 14, 35),
+    },
+    {
+      id: uid("audit", 3),
+      patientId: patient.id,
+      userId: "user_james",
+      userName: "James Martinez",
+      action: "export_csv",
+      resourceType: "patient_export",
+      outcome: "blocked",
+      detail: "Exporting the patient dataset is reserved for the primary caregiver.",
+      createdAt: isoDateTime(-1, 18, 20),
+      metadata: { requiredCapability: "export_data" },
+    },
+    {
+      id: uid("audit", 4),
+      patientId: patient.id,
+      userId: "user_doctor",
+      userName: "Dr. Robert Chen",
+      action: "document_uploaded",
+      resourceType: "documents",
+      outcome: "allowed",
+      detail: "Reviewed the most recent lab summary for the appointment.",
+      createdAt: isoDateTime(-2, 14, 20),
+    },
+    {
+      id: uid("audit", 5),
+      patientId: patient.id,
+      userId: viewer.id,
+      userName: viewer.name,
+      action: "patient_updated",
+      resourceType: "patient_profile",
+      outcome: "allowed",
+      detail: "Updated the patient profile and emergency contact details.",
+      createdAt: isoDateTime(-1, 16, 0),
+    },
+  ];
+
   const settings: AppSettingsRecord[] = [
     {
       userId: viewer.id,
@@ -662,6 +829,8 @@ export const buildDemoSnapshot = (): AppSnapshot => {
     activityEvents,
     activityReactions,
     settings,
+    patientAccess,
+    securityAuditLogs,
     activeUserId: viewer.id,
     activePatientId: patient.id,
   };

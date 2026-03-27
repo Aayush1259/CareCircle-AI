@@ -5,8 +5,8 @@ import toast from "react-hot-toast";
 import { Badge, Button, Card, Modal, SectionHeader } from "@/components/ui";
 import { useAppData } from "@/context/AppDataContext";
 import { calcAge, formatDate } from "@/lib/format";
+import { apiBase } from "@/lib/api";
 
-const apiBase = import.meta.env.VITE_API_URL || "/api";
 const backendUrl = apiBase.endsWith("/api") ? apiBase.slice(0, -4) : apiBase;
 
 const severityLabel = (type: string) =>
@@ -172,7 +172,7 @@ export const EmergencyPage = () => {
                     <PhoneCall className="h-4 w-4" />
                     Call now
                   </Button>
-                  <a href={`/api/emergency/${protocol.id}/pdf`} target="_blank" rel="noreferrer">
+                  <a href={`${apiBase}/emergency/${protocol.id}/pdf`} target="_blank" rel="noreferrer">
                     <Button variant="secondary" onClick={() => setDownloadingId(protocol.id)}>
                       <Download className="h-4 w-4" />
                       {downloadingId === protocol.id ? "Downloading..." : "PDF"}

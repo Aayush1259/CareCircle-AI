@@ -10,7 +10,7 @@ const resolveApiBase = () => {
   return "/api";
 };
 
-const apiBase = resolveApiBase();
+export const apiBase = resolveApiBase();
 export const authStorageKey = "carecircle_auth_token";
 
 export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {

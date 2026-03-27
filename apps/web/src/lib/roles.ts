@@ -50,6 +50,7 @@ export const roleAllowedPaths = (role?: UserRole | null) => {
   const doctorPaths = [
     "/doctor-home",
     "/journal",
+    "/documents",
     "/appointments",
     "/vitals",
     "/emergency",
