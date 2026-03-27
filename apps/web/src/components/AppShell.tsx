@@ -122,7 +122,7 @@ export const AppShell = () => {
   };
 
   return (
-    <div className="min-h-screen bg-transparent text-textPrimary">
+    <div className="min-h-screen overflow-x-hidden bg-transparent text-textPrimary">
       <aside className="sidebar-scroll fixed left-0 top-0 hidden h-screen w-[290px] overflow-y-auto border-r border-borderColor/70 bg-surface/95 px-5 py-6 backdrop-blur lg:flex lg:flex-col">
         <div className="rounded-3xl bg-gradient-to-br from-brand to-brandDark p-5 text-white shadow-calm">
           <p className="text-sm font-semibold uppercase tracking-[0.22em] text-white/80">CareCircle AI</p>
@@ -162,9 +162,9 @@ export const AppShell = () => {
         </div>
       </aside>
 
-      <div className="lg:pl-[290px]">
+      <div className="min-w-0 overflow-x-hidden lg:pl-[290px]">
         <header className="sticky top-0 z-40 border-b border-borderColor/80 bg-bg/92 backdrop-blur">
-          <div className="mx-auto flex max-w-[1280px] items-center gap-3 px-4 py-4 sm:px-6">
+          <div className="mx-auto flex w-full max-w-[1280px] min-w-0 items-center gap-3 px-4 py-4 sm:px-6">
             <button
               type="button"
               className="rounded-2xl border border-borderColor bg-surface p-3 shadow-sm lg:hidden"
@@ -244,7 +244,7 @@ export const AppShell = () => {
           </div>
         </header>
 
-        <main role="main" className="mx-auto w-full max-w-[1280px] flex-1 px-4 py-6 pb-44 sm:px-6 lg:pb-8">
+        <main role="main" className="mx-auto w-full max-w-[1280px] min-w-0 flex-1 px-4 py-6 pb-44 sm:px-6 lg:pb-8">
           <Outlet />
         </main>
       </div>

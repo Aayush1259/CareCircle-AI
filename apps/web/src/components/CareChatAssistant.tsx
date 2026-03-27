@@ -76,7 +76,7 @@ export const CareChatAssistant = ({
   };
 
   return (
-    <div className={`grid gap-4 ${compact ? "lg:grid-cols-[0.8fr,1.2fr]" : "xl:grid-cols-[0.9fr,1.1fr]"}`}>
+    <div className={`grid gap-4 ${compact ? "lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]" : "xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]"}`}>
       <div className={`space-y-4 ${compact ? "order-2 lg:order-1" : ""}`}>
         <div className="rounded-[28px] border border-borderColor bg-surface p-4">
           <div className="mb-4 flex items-center justify-between gap-3">
@@ -167,13 +167,14 @@ export const CareChatAssistant = ({
           ))}
         </div>
 
-        <div className="mt-4 flex gap-3">
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row">
           <Textarea
+            className="min-w-0 flex-1"
             value={message}
             placeholder="Ask CareCircle anything about care, medications, stress, or appointments..."
             onChange={(event) => setMessage(event.target.value)}
           />
-          <Button className="self-end" onClick={() => void sendMessage()}>
+          <Button className="sm:self-end" onClick={() => void sendMessage()}>
             <Send className="h-4 w-4" />
             Send
           </Button>

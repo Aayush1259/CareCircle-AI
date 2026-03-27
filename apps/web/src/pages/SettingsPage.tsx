@@ -368,7 +368,7 @@ export const SettingsPage = () => {
                 ))}
                 <input
                   list="condition-options"
-                  className="min-w-[220px] flex-1 border-0 p-2 text-base outline-none"
+                  className="min-w-0 flex-1 border-0 p-2 text-base outline-none"
                   placeholder="Add another condition"
                   value={conditionDraft}
                   onChange={(event) => setConditionDraft(event.target.value)}
@@ -427,7 +427,7 @@ export const SettingsPage = () => {
                   </button>
                 ))}
                 <input
-                  className="min-w-[220px] flex-1 border-0 p-2 text-base outline-none"
+                  className="min-w-0 flex-1 border-0 p-2 text-base outline-none"
                   placeholder="Type an allergy and press Enter"
                   value={allergyDraft}
                   onChange={(event) => setAllergyDraft(event.target.value)}

@@ -160,7 +160,7 @@ export const DocumentsPage = () => {
     <div className="space-y-6">
       <Card>
         <SectionHeader title="Upload documents" description="Drop a document here and CareCircle will explain it in plain language." />
-        <div className="grid gap-4 lg:grid-cols-[1.15fr,0.85fr]">
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
           <label
             className={`flex min-h-[160px] cursor-pointer flex-col items-center justify-center rounded-[28px] border-2 border-dashed p-6 text-center transition ${
               dragActive ? "border-brand bg-brandSoft/60" : "border-brand/35 bg-brandSoft/30"
@@ -223,7 +223,7 @@ export const DocumentsPage = () => {
 
       <Card>
         <SectionHeader title="Document library" description="Search documents, filter by category, and open the AI summary in one tap." />
-        <div className="grid gap-3 lg:grid-cols-[1fr,0.8fr,0.8fr,0.8fr,0.8fr]">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
           <Input value={search} placeholder="Search documents or AI summaries..." onChange={(event) => setSearch(event.target.value)} />
           <Select value={dateRange} onChange={(event) => setDateRange(event.target.value)}>
             <option value="all">All time</option>
@@ -288,7 +288,7 @@ export const DocumentsPage = () => {
 
       <Modal open={Boolean(selectedDocument)} title={selectedDocument?.fileName ?? "Document details"} onClose={() => setSelectedDocument(null)}>
         {selectedDocument ? (
-          <div className="grid gap-6 lg:grid-cols-[0.95fr,1.05fr]">
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
             <div className="rounded-[28px] border border-borderColor bg-slate-50 p-5">
               <div className="mb-4 flex items-center justify-between gap-3">
                 <p className="text-sm font-semibold uppercase tracking-[0.18em] text-textSecondary">Preview</p>

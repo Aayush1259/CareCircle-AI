@@ -126,7 +126,7 @@ export const JournalPage = () => {
   };
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[0.92fr,1.08fr]">
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
       <Card className="h-fit">
         <SectionHeader
           title="Care journal"
@@ -134,7 +134,7 @@ export const JournalPage = () => {
           action={<Button onClick={() => setModalOpen(true)}>New entry</Button>}
         />
         <div className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-[1fr,180px]">
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,180px)]">
             <div className="relative">
               <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-textSecondary" />
               <Input value={query} placeholder="Search entries..." className="pl-11" onChange={(event) => setQuery(event.target.value)} />

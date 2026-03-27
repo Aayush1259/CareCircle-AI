@@ -286,7 +286,7 @@ export const AppointmentsPage = () => {
         </div>
       </Card>
 
-      <div className="grid gap-6 xl:grid-cols-[1.05fr,0.95fr]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
         <Card>
           <SectionHeader title={`Appointments for ${formatDate(selectedDate)}`} description="Use Prep Notes to gather questions, medications, and recent care notes." />
           {selectedDayAppointments.length ? (
@@ -424,9 +424,9 @@ export const AppointmentsPage = () => {
 
             <div className="rounded-3xl border border-borderColor p-4">
               <p className="font-semibold text-textPrimary">Questions to ask</p>
-              <div className="mt-3 flex gap-3">
-                <Textarea value={questionDraft} placeholder="Add a question..." onChange={(event) => setQuestionDraft(event.target.value)} />
-                <Button className="self-end" onClick={() => void addPrepQuestion()}>Add</Button>
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+                <Textarea className="min-w-0 flex-1" value={questionDraft} placeholder="Add a question..." onChange={(event) => setQuestionDraft(event.target.value)} />
+                <Button className="sm:self-end" onClick={() => void addPrepQuestion()}>Add</Button>
               </div>
               <ul className="mt-4 space-y-2 text-sm text-textSecondary">
                 {prepTarget.questionsToAsk.map((question) => (

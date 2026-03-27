@@ -132,7 +132,7 @@ export const MedicationsPage = () => {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 lg:grid-cols-[0.8fr,1.2fr]">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
         <Card>
           <SectionHeader title="Today's adherence" description="A quick pulse check for today." />
           <div className="mx-auto max-w-[240px]">
@@ -251,7 +251,7 @@ export const MedicationsPage = () => {
             title="All medications"
             description="Purpose, refill timing, and the details that keep errors down."
             action={
-              <Select value={filter} onChange={(event) => setFilter(event.target.value)} className="w-[180px]">
+              <Select value={filter} onChange={(event) => setFilter(event.target.value)} className="w-full sm:w-[180px]">
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
                 <option value="all">All</option>
@@ -292,7 +292,7 @@ export const MedicationsPage = () => {
       {tab === "Interaction Checker" ? (
         <Card>
           <SectionHeader title="Interaction checker" description="Pick any two or more medications and let CareCircle explain the result in plain English." />
-          <div className="grid gap-4 lg:grid-cols-[0.7fr,1.3fr]">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)]">
             <div className="space-y-3">
               {activeMedications.map((medication) => {
                 const selected = selectedIds.includes(medication.id);
@@ -353,7 +353,7 @@ export const MedicationsPage = () => {
               .map((medication) => {
                 const daysRemaining = Math.ceil((new Date(medication.refillDate).getTime() - Date.now()) / 86400000);
                 return (
-                  <div key={medication.id} className="grid gap-3 rounded-3xl border border-borderColor p-4 lg:grid-cols-[1.4fr,0.7fr,0.9fr] lg:items-center">
+                  <div key={medication.id} className="grid gap-3 rounded-3xl border border-borderColor p-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,0.7fr)_minmax(0,0.9fr)] lg:items-center">
                     <div>
                       <p className="font-bold text-textPrimary">{medication.name}</p>
                       <p className="text-sm text-textSecondary">{medication.pharmacyName}</p>

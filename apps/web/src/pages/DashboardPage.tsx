@@ -180,7 +180,7 @@ export const DashboardPage = () => {
         </div>
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-[1.05fr,0.95fr]">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
         <Card>
           <SectionHeader title="Today's med schedule" description="The next medication moments that matter most right now." />
           <div className="space-y-3">
@@ -234,7 +234,7 @@ export const DashboardPage = () => {
         </Card>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1fr,1fr]">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <Card>
           <SectionHeader title="Recent AI insights" description="Patterns and nudges CareCircle has noticed." />
           {data.aiInsights.length ? (

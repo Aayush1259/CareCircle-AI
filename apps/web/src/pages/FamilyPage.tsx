@@ -347,7 +347,7 @@ export const FamilyPage = () => {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-6 lg:grid-cols-[0.95fr,1.05fr]">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
         <Card>
           <SectionHeader
             title="Family members"
@@ -412,7 +412,7 @@ export const FamilyPage = () => {
         </Card>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[0.95fr,1.05fr]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
         <Card>
           <SectionHeader title="Shared updates feed" description="Every meaningful update in one live timeline." />
           <div className="space-y-3">
@@ -497,8 +497,9 @@ export const FamilyPage = () => {
               </p>
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row">
               <Textarea
+                className="min-w-0 flex-1"
                 value={newMessage}
                 placeholder="Share an update with the family..."
                 onChange={(event) => setNewMessage(event.target.value)}
@@ -509,7 +510,7 @@ export const FamilyPage = () => {
                   }
                 }}
               />
-              <Button className="self-end" onClick={() => void sendFamilyMessage()}>
+              <Button className="sm:self-end" onClick={() => void sendFamilyMessage()}>
                 <Send className="h-4 w-4" />
                 Send
               </Button>

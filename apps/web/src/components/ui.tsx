@@ -9,7 +9,7 @@ export const Card = ({ className, children }: { className?: string; children: Re
     initial={{ opacity: 0, y: 10 }}
     animate={{ opacity: 1, y: 0 }}
     transition={{ duration: 0.15 }}
-    className={cn("surface-panel panel-pad", className)}
+    className={cn("surface-panel panel-pad min-w-0", className)}
   >
     {children}
   </motion.section>
@@ -138,20 +138,25 @@ export const Toggle = ({
   onChange: (value: boolean) => void;
   "aria-label"?: string;
 }) => (
-  <div className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center">
+  <div className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full">
     <button
       type="button"
       onClick={() => onChange(!checked)}
       className={cn(
-        "relative h-[26px] w-[48px] rounded-full transition-all duration-[220ms] [transition-timing-function:cubic-bezier(0.4,0,0.2,1)] focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand",
-        checked ? "bg-brand" : "bg-[#CBD5E1]",
+        "relative h-[26px] w-[48px] overflow-hidden rounded-full border border-black/5 p-[3px] shadow-[inset_0_1px_2px_rgba(15,23,42,0.18)] transition-all duration-[220ms] [transition-timing-function:cubic-bezier(0.4,0,0.2,1)] focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand",
+        checked
+          ? "bg-gradient-to-b from-brand to-brandDark"
+          : "bg-gradient-to-b from-slate-200 to-slate-300",
       )}
-      aria-pressed={checked}
+      role="switch"
+      aria-checked={checked}
       aria-label={ariaLabel}
     >
       <span
-        className="absolute top-[3px] h-[20px] w-[20px] rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.25)] transition-all duration-[220ms] [transition-timing-function:cubic-bezier(0.4,0,0.2,1)]"
-        style={{ left: checked ? 25 : 3 }}
+        className={cn(
+          "absolute top-[3px] h-[20px] w-[20px] rounded-full border border-black/5 bg-white shadow-[0_2px_6px_rgba(15,23,42,0.24)] transition-all duration-[220ms] [transition-timing-function:cubic-bezier(0.4,0,0.2,1)]",
+          checked ? "translate-x-[22px]" : "translate-x-0",
+        )}
       />
     </button>
   </div>

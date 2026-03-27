@@ -21,7 +21,7 @@ export const LoginPage = () => {
 
   return (
     <div className="mx-auto flex min-h-screen max-w-6xl items-center justify-center p-4 sm:p-6">
-      <div className="grid w-full max-w-5xl gap-6 lg:grid-cols-[1.1fr,0.9fr]">
+      <div className="grid w-full max-w-5xl gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
         <Card className="overflow-hidden bg-gradient-to-br from-brand to-brandDark p-8 text-white shadow-calm">
           <p className="text-sm font-semibold uppercase tracking-[0.24em] text-white/75">CareCircle AI</p>
           <h1 className="mt-4 text-4xl font-extrabold">You are not alone in this.</h1>

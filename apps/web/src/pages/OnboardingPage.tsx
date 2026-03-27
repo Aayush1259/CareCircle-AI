@@ -102,7 +102,7 @@ export const OnboardingPage = () => {
             <Input type="email" value={form.email} placeholder="Example: sarah@email.com" onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} />
           </Field>
           <Field label="Password">
-            <div className="flex gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row">
               <Input type={passwordVisible ? "text" : "password"} value={form.password} placeholder="Create a secure password" onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} />
               <Button type="button" variant="ghost" onClick={() => setPasswordVisible((current) => !current)}>
                 {passwordVisible ? "Hide" : "Show"}
@@ -223,7 +223,7 @@ export const OnboardingPage = () => {
 
   return (
     <div className="min-h-screen bg-transparent px-4 py-8 sm:px-6">
-      <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[0.95fr,1.05fr]">
+      <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
         <Card className="overflow-hidden bg-gradient-to-br from-brand to-brandDark text-white">
           <p className="text-sm font-semibold uppercase tracking-[0.22em] text-white/75">CareCircle AI</p>
           <h1 className="mt-6 text-4xl font-extrabold">Calm care, one simple step at a time.</h1>
