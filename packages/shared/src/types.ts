@@ -1,4 +1,4 @@
-export type UserRole = "caregiver" | "family_member" | "admin";
+export type UserRole = "caregiver" | "family_member" | "doctor" | "admin";
 export type FamilyRole =
   | "primary_caregiver"
   | "secondary_caregiver"
@@ -92,6 +92,7 @@ export interface UserRecord {
   role: UserRole;
   phone?: string;
   photoUrl?: string;
+  licenseNumber?: string;
   createdAt: string;
   lastLogin: string;
   notificationPreferences: NotificationPreferences;
@@ -430,6 +431,7 @@ export interface AppSnapshot {
   documents: DocumentRecord[];
   appointments: AppointmentRecord[];
   familyMembers: FamilyMemberRecord[];
+  familyMessages: FamilyMessageRecord[];
   tasks: TaskRecord[];
   emergencyProtocols: EmergencyProtocolRecord[];
   healthVitals: HealthVitalsRecord[];

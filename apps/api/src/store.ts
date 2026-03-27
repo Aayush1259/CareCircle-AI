@@ -144,6 +144,7 @@ export const getBootstrapPayload = (): BootstrapPayload => ({
     documents: state.documents,
     appointments: state.appointments,
     familyMembers: state.familyMembers,
+    familyMessages: getFamilyMessages(),
     tasks: state.tasks,
     emergencyProtocols: state.emergencyProtocols,
     healthVitals: state.healthVitals,

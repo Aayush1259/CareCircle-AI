@@ -5,6 +5,7 @@ import toast from "react-hot-toast";
 import { Button, Card, Field, Input, Select } from "@/components/ui";
 import { useAppData } from "@/context/AppDataContext";
 import { calcAge } from "@/lib/format";
+import { roleHomePath } from "@/lib/roles";
 
 const commonConditions = [
   "Type 2 Diabetes",
@@ -70,7 +71,7 @@ export const OnboardingPage = () => {
       });
       await refresh();
       toast.success("Your CareCircle is ready.");
-      navigate("/dashboard");
+      navigate(roleHomePath(form.role as "caregiver" | "family_member" | "doctor"), { replace: true });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Please try again.");
     }
@@ -113,6 +114,7 @@ export const OnboardingPage = () => {
             <Select value={form.role} onChange={(event) => setForm((current) => ({ ...current, role: event.target.value }))}>
               <option value="caregiver">I am the main caregiver</option>
               <option value="family_member">I'm a family member helping out</option>
+              <option value="doctor">I am a doctor or provider</option>
             </Select>
           </Field>
         </div>

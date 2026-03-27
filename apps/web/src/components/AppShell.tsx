@@ -20,12 +20,14 @@ import {
   X,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import type { UserRole } from "@carecircle/shared";
 import { calcAge, relativeTime, sentenceCase } from "@/lib/format";
 import { useAppData } from "@/context/AppDataContext";
+import { roleAllowedPaths, roleHomePath, roleLabel } from "@/lib/roles";
 import { Badge, Button, Modal, cn } from "./ui";
 import { CareChatAssistant } from "./CareChatAssistant";
 
-const navigation = [
+const caregiverNavigation = [
   { to: "/dashboard", label: "Dashboard", icon: Home },
   { to: "/medications", label: "Medications", icon: Pill },
   { to: "/journal", label: "Care Journal", icon: BookHeart },
@@ -38,11 +40,45 @@ const navigation = [
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 
-const mobilePrimaryTabs = [
+const familyNavigation = [
+  { to: "/family-home", label: "Home", icon: Home },
+  { to: "/medications", label: "Medications", icon: Pill },
+  { to: "/tasks", label: "Tasks", icon: ClipboardCheck },
+  { to: "/family", label: "Family Chat", icon: Users },
+  { to: "/emergency", label: "Emergency", icon: ShieldAlert },
+  { to: "/settings", label: "Settings", icon: Settings },
+];
+
+const doctorNavigation = [
+  { to: "/doctor-home", label: "Home", icon: Home },
+  { to: "/journal", label: "Care Journal", icon: BookHeart },
+  { to: "/vitals", label: "Health Vitals", icon: HeartPulse },
+  { to: "/appointments", label: "Appointments", icon: CalendarDays },
+  { to: "/emergency", label: "Emergency", icon: ShieldAlert },
+  { to: "/settings", label: "Settings", icon: Settings },
+];
+
+const caregiverMobileTabs = [
   { to: "/dashboard", label: "Dashboard", shortLabel: "Home", icon: Home },
   { to: "/medications", label: "Medications", shortLabel: "Meds", icon: Pill },
   { to: "/journal", label: "Care Journal", shortLabel: "Journal", icon: BookHeart },
   { to: "/family", label: "Family Hub", shortLabel: "Family", icon: Users },
+  { to: "/emergency", label: "Emergency", shortLabel: "SOS", icon: ShieldAlert },
+];
+
+const familyMobileTabs = [
+  { to: "/family-home", label: "Home", shortLabel: "Home", icon: Home },
+  { to: "/medications", label: "Medications", shortLabel: "Meds", icon: Pill },
+  { to: "/tasks", label: "Tasks", shortLabel: "Tasks", icon: ClipboardCheck },
+  { to: "/family", label: "Family Chat", shortLabel: "Family", icon: Users },
+  { to: "/emergency", label: "Emergency", shortLabel: "SOS", icon: ShieldAlert },
+];
+
+const doctorMobileTabs = [
+  { to: "/doctor-home", label: "Home", shortLabel: "Home", icon: Home },
+  { to: "/journal", label: "Care Journal", shortLabel: "Journal", icon: BookHeart },
+  { to: "/vitals", label: "Health Vitals", shortLabel: "Vitals", icon: HeartPulse },
+  { to: "/appointments", label: "Appointments", shortLabel: "Appts", icon: CalendarDays },
   { to: "/emergency", label: "Emergency", shortLabel: "SOS", icon: ShieldAlert },
 ];
 
@@ -58,17 +94,28 @@ export const AppShell = () => {
   const [notificationsSaving, setNotificationsSaving] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const viewerRole = (bootstrap?.viewer.role ?? "caregiver") as UserRole;
+  const navigation = viewerRole === "family_member" ? familyNavigation : viewerRole === "doctor" ? doctorNavigation : caregiverNavigation;
+  const mobilePrimaryTabs = viewerRole === "family_member" ? familyMobileTabs : viewerRole === "doctor" ? doctorMobileTabs : caregiverMobileTabs;
+  const allowedPaths = useMemo(() => roleAllowedPaths(viewerRole), [viewerRole]);
 
   useEffect(() => {
     if (location.pathname.startsWith("/care-chat")) {
       setChatOpen(true);
-      navigate("/dashboard", { replace: true });
+      navigate(roleHomePath(viewerRole), { replace: true });
     }
-  }, [location.pathname, navigate]);
+  }, [location.pathname, navigate, viewerRole]);
+
+  useEffect(() => {
+    const isAllowed = allowedPaths.some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`));
+    if (!isAllowed && location.pathname !== "/") {
+      navigate(roleHomePath(viewerRole), { replace: true });
+    }
+  }, [allowedPaths, location.pathname, navigate, viewerRole]);
 
   const pageTitle = useMemo(
     () => navigation.find((item) => location.pathname.startsWith(item.to))?.label ?? "CareCircle AI",
-    [location.pathname],
+    [location.pathname, navigation],
   );
 
   if (!bootstrap) return null;
@@ -82,6 +129,7 @@ export const AppShell = () => {
   const chatBadgeCount = activeInsights.length || unreadCount;
   const patientLabel = `${patient.preferredName ?? patient.name} - ${calcAge(patient.dateOfBirth)}`;
   const criticalMeds = bootstrap.data.medications.filter((item) => item.isActive).slice(0, 5);
+  const roleTitle = roleLabel(viewerRole);
 
   const markNotificationRead = async (notificationId: string) => {
     try {
@@ -130,6 +178,9 @@ export const AppShell = () => {
           <p className="mt-2 text-base leading-7 text-white/85">
             One place for medications, notes, family updates, emergencies, and support.
           </p>
+          <div className="mt-4 inline-flex rounded-full bg-white/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-white/90">
+            {roleTitle}
+          </div>
         </div>
 
         <nav aria-label="Primary navigation" className="mt-8 flex-1 space-y-2">
@@ -181,6 +232,7 @@ export const AppShell = () => {
                   {bootstrap.viewer.name.split(" ")[0]} is caring for {patient.preferredName ?? patient.name}
                 </h2>
                 <span className="rounded-full bg-brandSoft px-3 py-1 text-sm font-semibold text-brandDark">{patientLabel}</span>
+                <Badge tone="brand">{roleTitle}</Badge>
               </div>
             </div>
 
@@ -442,7 +494,7 @@ export const AppShell = () => {
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: "100%", opacity: 0 }}
               transition={{ duration: 0.28, ease: [0.4, 0, 0.2, 1] }}
-              className="relative h-[75vh] w-full overflow-hidden rounded-t-[16px] border border-borderColor bg-bg shadow-[0_20px_60px_rgba(0,0,0,0.15)] lg:h-[540px] lg:w-[380px] lg:rounded-[16px]"
+              className="relative flex h-[78vh] w-full flex-col overflow-hidden rounded-t-[16px] border border-borderColor bg-bg shadow-[0_20px_60px_rgba(0,0,0,0.15)] lg:h-[min(720px,calc(100vh-2rem))] lg:w-[min(920px,calc(100vw-2rem))] lg:rounded-[24px]"
               onClick={(event) => event.stopPropagation()}
             >
               <div
@@ -460,7 +512,7 @@ export const AppShell = () => {
                   </button>
                 </div>
               </div>
-              <div className="h-[calc(75vh-57px)] overflow-y-auto p-4 lg:h-[calc(540px-57px)]">
+              <div className="flex-1 overflow-y-auto p-4">
                 <CareChatAssistant compact />
               </div>
             </motion.div>

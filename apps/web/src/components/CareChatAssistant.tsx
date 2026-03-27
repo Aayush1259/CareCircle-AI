@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { HeartHandshake, Search, Send, Sparkles } from "lucide-react";
 import toast from "react-hot-toast";
 import type { ChatSessionRecord } from "@carecircle/shared";
@@ -12,26 +12,33 @@ export const CareChatAssistant = ({
   compact?: boolean;
 }) => {
   const { bootstrap, request, refresh } = useAppData();
-  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(bootstrap?.data.chatSessions[0]?.id ?? null);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [search, setSearch] = useState("");
   const [emotionalCheckInOpen, setEmotionalCheckInOpen] = useState(false);
   const [checkInMood, setCheckInMood] = useState("Tired but trying");
   const [checkInReply, setCheckInReply] = useState("");
+  const hasSeededSessionRef = useRef(false);
 
-  if (!bootstrap) return null;
+  useEffect(() => {
+    if (hasSeededSessionRef.current) return;
+    const firstSessionId = bootstrap?.data.chatSessions[0]?.id;
+    if (!firstSessionId) return;
+    setSelectedSessionId(firstSessionId);
+    hasSeededSessionRef.current = true;
+  }, [bootstrap?.data.chatSessions]);
 
-  const { patient, data } = bootstrap;
   const sessions = useMemo(
     () =>
-      data.chatSessions
+      (bootstrap?.data.chatSessions ?? [])
         .filter((session) => session.title.toLowerCase().includes(search.toLowerCase()))
         .slice(0, 10),
-    [data.chatSessions, search],
+    [bootstrap?.data.chatSessions, search],
   );
-  const selectedSession =
-    sessions.find((session) => session.id === selectedSessionId) ?? sessions[0];
-  const messages = data.chatMessages.filter((item) => item.sessionId === selectedSession?.id);
+  const selectedSession = selectedSessionId
+    ? sessions.find((session) => session.id === selectedSessionId) ?? null
+    : null;
+  const messages = (bootstrap?.data.chatMessages ?? []).filter((item) => item.sessionId === selectedSession?.id);
 
   const sendMessage = async (content = message, sessionId = selectedSession?.id) => {
     if (!content.trim()) return;
@@ -75,34 +82,63 @@ export const CareChatAssistant = ({
     }
   };
 
+  if (!bootstrap) return null;
+
+  const { patient } = bootstrap;
+
   return (
-    <div className={`grid gap-4 ${compact ? "lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]" : "xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]"}`}>
-      <div className={`space-y-4 ${compact ? "order-2 lg:order-1" : ""}`}>
-        <div className="rounded-[28px] border border-borderColor bg-surface p-4">
-          <div className="mb-4 flex items-center justify-between gap-3">
+    <div
+      className={`grid gap-5 ${
+        compact ? "lg:grid-cols-[minmax(260px,0.82fr)_minmax(0,1.18fr)]" : "xl:grid-cols-[minmax(280px,0.9fr)_minmax(0,1.1fr)]"
+      }`}
+    >
+      <div className="space-y-4">
+        <div className="min-w-0 rounded-[28px] border border-borderColor bg-surface p-4">
+          <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-lg font-bold text-textPrimary">Recent chats</p>
               <p className="text-sm text-textSecondary">Last 10 conversations stay here.</p>
             </div>
-            <Button variant="secondary" onClick={() => setSelectedSessionId(null)}>New chat</Button>
+            <Button variant="secondary" onClick={() => setSelectedSessionId(null)}>
+              New chat
+            </Button>
           </div>
-          <div className="relative mb-4">
+          <div className="relative mt-4">
             <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-textSecondary" />
-            <Input value={search} placeholder="Search chat history" className="pl-11" onChange={(event) => setSearch(event.target.value)} />
+            <Input
+              value={search}
+              placeholder="Search chat history"
+              className="pl-11"
+              onChange={(event) => setSearch(event.target.value)}
+            />
           </div>
-          <div className="max-h-[180px] space-y-3 overflow-y-auto pr-1">
+          <div className="mt-4 max-h-[240px] space-y-3 overflow-y-auto pr-1 lg:max-h-[320px]">
             {sessions.map((session) => (
               <button
                 key={session.id}
                 type="button"
                 onClick={() => setSelectedSessionId(session.id)}
-                className={`w-full rounded-3xl border p-4 text-left ${selectedSession?.id === session.id ? "border-brand bg-brandSoft/50" : "border-borderColor bg-white"}`}
+                className={`w-full rounded-3xl border p-4 text-left transition ${
+                  selectedSession?.id === session.id ? "border-brand bg-brandSoft/50" : "border-borderColor bg-white hover:bg-slate-50"
+                }`}
               >
                 <p className="font-semibold text-textPrimary">{session.title}</p>
                 <p className="mt-1 text-sm text-textSecondary">{relativeTime(session.updatedAt)}</p>
               </button>
             ))}
           </div>
+        </div>
+
+        <div className="rounded-[28px] bg-brandSoft/55 p-5">
+          <p className="text-sm font-semibold uppercase tracking-[0.16em] text-brandDark/75">Quick check-in</p>
+          <h3 className="mt-2 text-2xl font-bold text-textPrimary">Need a calmer moment?</h3>
+          <p className="mt-2 text-sm leading-7 text-textSecondary">
+            CareCircle can help with stress, confusion, and the next right step without making you dig through the whole app.
+          </p>
+          <Button className="mt-4 w-full" variant="secondary" onClick={() => setEmotionalCheckInOpen(true)}>
+            <HeartHandshake className="h-4 w-4" />
+            Open check-in
+          </Button>
         </div>
 
         {!compact ? (
@@ -112,46 +148,55 @@ export const CareChatAssistant = ({
                 <p className="text-sm font-semibold uppercase tracking-[0.18em] text-white/75">CareCircle</p>
                 <h1 className="mt-2 text-3xl font-bold">A caring guide for your questions</h1>
                 <p className="mt-3 text-white/85">
-                  Supporting care for {patient.preferredName ?? patient.name}, age {calcAge(patient.dateOfBirth)}, with {patient.primaryDiagnosis} and {patient.secondaryConditions.join(", ")}.
+                  Supporting care for {patient.preferredName ?? patient.name}, age {calcAge(patient.dateOfBirth)}, with {patient.primaryDiagnosis} and{" "}
+                  {patient.secondaryConditions.join(", ")}.
                 </p>
               </div>
-              <Button variant="secondary" className="bg-white text-brandDark" onClick={() => setEmotionalCheckInOpen(true)}>
-                <HeartHandshake className="h-4 w-4" />
-                How are you doing?
-              </Button>
             </div>
           </div>
         ) : null}
       </div>
 
-      <div className={`rounded-[28px] border border-borderColor bg-surface p-4 ${compact ? "order-1 lg:order-2" : ""}`}>
+      <div className="min-w-0 rounded-[28px] border border-borderColor bg-surface p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="text-xl font-bold text-textPrimary">{selectedSession?.title ?? "New conversation"}</p>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-textSecondary">Conversation</p>
+            <p className="mt-1 truncate text-2xl font-bold text-textPrimary">{selectedSession?.title ?? "New conversation"}</p>
             <p className="mt-1 text-sm text-textSecondary">Warm, short answers unless you ask for more detail.</p>
           </div>
-          {compact ? (
-            <Button variant="secondary" onClick={() => setEmotionalCheckInOpen(true)}>
-              <HeartHandshake className="h-4 w-4" />
-              Check in
+          <div className="flex flex-wrap gap-2">
+            {compact ? (
+              <Button variant="secondary" onClick={() => setEmotionalCheckInOpen(true)}>
+                <HeartHandshake className="h-4 w-4" />
+                Check in
+              </Button>
+            ) : null}
+            <Button variant="secondary" onClick={() => setSelectedSessionId(null)}>
+              New chat
             </Button>
-          ) : null}
+          </div>
         </div>
 
-        <div className={`mt-4 space-y-4 overflow-y-auto rounded-[28px] bg-slate-50 p-4 ${compact ? "max-h-[220px]" : "max-h-[420px]"}`}>
-          {selectedSession ? (
-            messages.map((item) => (
-              <div key={item.id} className={`flex ${item.role === "user" ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[85%] rounded-[24px] px-4 py-3 ${item.role === "user" ? "bg-brand text-white" : "bg-white text-textPrimary"}`}>
-                  <p className="text-sm leading-7">{item.content}</p>
+        <div className="mt-4 rounded-[24px] border border-borderColor bg-slate-50 p-4">
+          <div className={`space-y-4 overflow-y-auto pr-1 ${compact ? "max-h-[340px] lg:max-h-[460px]" : "max-h-[480px]"}`}>
+            {selectedSession ? (
+              messages.map((item) => (
+                <div key={item.id} className={`flex ${item.role === "user" ? "justify-end" : "justify-start"}`}>
+                  <div
+                    className={`max-w-[90%] rounded-[24px] px-4 py-3 ${
+                      item.role === "user" ? "bg-brand text-white" : "bg-white text-textPrimary shadow-sm"
+                    }`}
+                  >
+                    <p className="text-sm leading-7">{item.content}</p>
+                  </div>
                 </div>
+              ))
+            ) : (
+              <div className="rounded-3xl bg-white p-5 text-sm text-textSecondary">
+                Start a new conversation. CareCircle can help with medications, documents, appointments, symptoms, and caregiver stress.
               </div>
-            ))
-          ) : (
-            <div className="rounded-3xl bg-white p-5 text-sm text-textSecondary">
-              Start a new conversation. CareCircle can help with medications, documents, appointments, symptoms, and caregiver stress.
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         <div className="mt-4 flex flex-wrap gap-2">
@@ -159,7 +204,7 @@ export const CareChatAssistant = ({
             <button
               key={suggestion}
               type="button"
-              className="rounded-full bg-brandSoft px-4 py-2 text-left text-sm font-semibold text-brandDark"
+              className="rounded-full border border-borderColor bg-white px-4 py-2 text-left text-sm font-semibold text-textPrimary transition hover:bg-brandSoft/40"
               onClick={() => void sendMessage(suggestion)}
             >
               {suggestion}

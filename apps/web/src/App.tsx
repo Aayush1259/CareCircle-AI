@@ -3,11 +3,18 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { motion } from "framer-motion";
 import { AppShell } from "@/components/AppShell";
 import { useAppData } from "@/context/AppDataContext";
+import { roleHomePath } from "@/lib/roles";
 import { LoadingState } from "@/components/ui";
 
 const OnboardingPage = lazy(async () => ({ default: (await import("@/pages/OnboardingPage")).OnboardingPage }));
 const DashboardPage = lazy(async () => ({ default: (await import("@/pages/DashboardPage")).DashboardPage }));
 const LoginPage = lazy(async () => ({ default: (await import("@/pages/LoginPage")).LoginPage }));
+const SignupPage = lazy(async () => ({ default: (await import("@/pages/SignupPage")).SignupPage }));
+const ForgotPasswordPage = lazy(async () => ({ default: (await import("@/pages/ForgotPasswordPage")).ForgotPasswordPage }));
+const ResetPasswordPage = lazy(async () => ({ default: (await import("@/pages/ResetPasswordPage")).ResetPasswordPage }));
+const AuthCallbackPage = lazy(async () => ({ default: (await import("@/pages/AuthCallbackPage")).AuthCallbackPage }));
+const FamilyHomePage = lazy(async () => ({ default: (await import("@/pages/FamilyHomePage")).FamilyHomePage }));
+const DoctorHomePage = lazy(async () => ({ default: (await import("@/pages/DoctorHomePage")).DoctorHomePage }));
 const MedicationsPage = lazy(async () => ({ default: (await import("@/pages/MedicationsPage")).MedicationsPage }));
 const JournalPage = lazy(async () => ({ default: (await import("@/pages/JournalPage")).JournalPage }));
 const DocumentsPage = lazy(async () => ({ default: (await import("@/pages/DocumentsPage")).DocumentsPage }));
@@ -39,6 +46,7 @@ const LazyPage = ({ children }: { children: ReactNode }) => (
 
 const App = () => {
   const { bootstrap, loading, error, session } = useAppData();
+  const authenticatedHome = roleHomePath(bootstrap?.viewer.role ?? session?.viewer.role);
 
   if (loading) {
     return (
@@ -65,7 +73,39 @@ const App = () => {
         path="/login"
         element={(
           <LazyPage>
-            {session ? <Navigate to="/dashboard" replace /> : <LoginPage />}
+            {session ? <Navigate to={authenticatedHome} replace /> : <LoginPage />}
+          </LazyPage>
+        )}
+      />
+      <Route
+        path="/signup"
+        element={(
+          <LazyPage>
+            {session ? <Navigate to={authenticatedHome} replace /> : <SignupPage />}
+          </LazyPage>
+        )}
+      />
+      <Route
+        path="/forgot-password"
+        element={(
+          <LazyPage>
+            {session ? <Navigate to={authenticatedHome} replace /> : <ForgotPasswordPage />}
+          </LazyPage>
+        )}
+      />
+      <Route
+        path="/reset-password"
+        element={(
+          <LazyPage>
+            {session ? <Navigate to={authenticatedHome} replace /> : <ResetPasswordPage />}
+          </LazyPage>
+        )}
+      />
+      <Route
+        path="/auth/callback"
+        element={(
+          <LazyPage>
+            <AuthCallbackPage />
           </LazyPage>
         )}
       />
@@ -78,7 +118,23 @@ const App = () => {
         )}
       />
       <Route element={session ? <AppShell /> : <Navigate to="/login" replace />}>
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/" element={<Navigate to={authenticatedHome} replace />} />
+        <Route
+          path="/family-home"
+          element={(
+            <LazyPage>
+              <FamilyHomePage />
+            </LazyPage>
+          )}
+        />
+        <Route
+          path="/doctor-home"
+          element={(
+            <LazyPage>
+              <DoctorHomePage />
+            </LazyPage>
+          )}
+        />
         <Route
           path="/dashboard"
           element={(

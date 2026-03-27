@@ -47,8 +47,11 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 
 let cronRegistered = false;
 const publicApiPaths = new Set([
   "/api/health",
+  "/api/auth/signup",
   "/api/auth/login",
   "/api/auth/session",
+  "/api/auth/password-reset/request",
+  "/api/auth/password-reset/confirm",
 ]);
 
 const trimmedText = (value: unknown) => (typeof value === "string" ? value.trim() : "");
@@ -163,6 +166,31 @@ export const createServer = () => {
   });
 
   app.post(
+    "/api/auth/signup",
+    asyncHandler(async (request, response) => {
+      const name = trimmedText(request.body?.name);
+      const email = trimmedText(request.body?.email);
+      const password = trimmedText(request.body?.password);
+      const role = trimmedText(request.body?.role);
+      const licenseNumber = optionalText(request.body?.licenseNumber) || undefined;
+
+      if (!hasText(name) || !hasText(email) || !hasText(password)) {
+        sendValidationError(response, "Please enter your name, email, and password.");
+        return;
+      }
+
+      const session = await authService.signup({
+        name,
+        email,
+        password,
+        role: role === "family_member" || role === "doctor" || role === "admin" ? role : "caregiver",
+        licenseNumber,
+      });
+      response.status(201).json({ session });
+    }),
+  );
+
+  app.post(
     "/api/auth/login",
     asyncHandler(async (request, response) => {
       const email = trimmedText(request.body?.email);
@@ -175,6 +203,36 @@ export const createServer = () => {
 
       const session = await authService.login(email, password);
       response.status(201).json({ session });
+    }),
+  );
+
+  app.post(
+    "/api/auth/password-reset/request",
+    asyncHandler(async (request, response) => {
+      const email = trimmedText(request.body?.email);
+      if (!hasText(email)) {
+        sendValidationError(response, "Please enter the email address for your account.");
+        return;
+      }
+
+      const result = await authService.requestPasswordReset({ email });
+      response.json(result);
+    }),
+  );
+
+  app.post(
+    "/api/auth/password-reset/confirm",
+    asyncHandler(async (request, response) => {
+      const token = trimmedText(request.body?.token);
+      const password = trimmedText(request.body?.password);
+
+      if (!hasText(token) || !hasText(password)) {
+        sendValidationError(response, "Please provide the reset code and a new password.");
+        return;
+      }
+
+      const result = await authService.confirmPasswordReset(token, password);
+      response.json(result);
     }),
   );
 
@@ -238,7 +296,7 @@ export const createServer = () => {
     "/api/onboarding",
     asyncHandler(async (request, response) => {
       const { account, patient, medication, familyInvite } = request.body as {
-        account?: { name: string; email: string; role: "caregiver" | "family_member" };
+        account?: { name: string; email: string; role: "caregiver" | "family_member" | "doctor" };
         patient?: { name: string; dateOfBirth: string; conditions: string[]; doctorName: string; doctorPhone: string };
         medication?: Partial<MedicationRecord>;
         familyInvite?: { name?: string; email: string; relationship?: string };

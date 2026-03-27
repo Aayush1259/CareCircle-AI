@@ -1,10 +1,13 @@
 import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { HeartHandshake, LockKeyhole, Mail } from "lucide-react";
 import toast from "react-hot-toast";
 import { Button, Card, Field, Input } from "@/components/ui";
 import { useAppData } from "@/context/AppDataContext";
+import { roleHomePath } from "@/lib/roles";
 
 export const LoginPage = () => {
+  const navigate = useNavigate();
   const { login, loading } = useAppData();
   const [email, setEmail] = useState("demo@carecircle.ai");
   const [password, setPassword] = useState("Demo1234");
@@ -12,8 +15,9 @@ export const LoginPage = () => {
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     try {
-      await login(email, password);
+      const session = await login(email, password);
       toast.success("Welcome back to CareCircle.");
+      navigate(roleHomePath(session.viewer.role), { replace: true });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Please try again.");
     }
@@ -87,6 +91,15 @@ export const LoginPage = () => {
               <p className="text-sm font-semibold text-textPrimary">Demo login</p>
               <p className="mt-1 text-sm text-textSecondary">demo@carecircle.ai</p>
               <p className="text-sm text-textSecondary">Demo1234</p>
+            </div>
+
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-3 text-sm">
+              <Link to="/signup" className="font-semibold text-brandDark">
+                Create an account
+              </Link>
+              <Link to="/forgot-password" className="font-semibold text-textSecondary">
+                Forgot password?
+              </Link>
             </div>
           </div>
         </Card>

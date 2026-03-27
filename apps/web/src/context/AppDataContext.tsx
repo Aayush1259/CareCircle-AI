@@ -10,7 +10,16 @@ interface AppDataContextValue {
   error: string | null;
   refresh: () => Promise<void>;
   request: typeof apiRequest;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<AuthSession>;
+  signup: (input: {
+    name: string;
+    email: string;
+    password: string;
+    role: "caregiver" | "family_member" | "doctor";
+    licenseNumber?: string;
+  }) => Promise<AuthSession>;
+  requestPasswordReset: (email: string) => Promise<{ message: string }>;
+  confirmPasswordReset: (token: string, password: string) => Promise<{ message: string }>;
   logout: () => Promise<void>;
 }
 
@@ -97,6 +106,7 @@ export const AppDataProvider = ({ children }: { children: React.ReactNode }) => 
       const bootstrapPayload = await apiRequest<BootstrapPayload>("/bootstrap");
       setBootstrap(bootstrapPayload);
       setError(null);
+      return payload.session;
     } catch (nextError) {
       window.localStorage.removeItem(authStorageKey);
       setSession(null);
@@ -106,6 +116,50 @@ export const AppDataProvider = ({ children }: { children: React.ReactNode }) => 
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  const signup = useCallback(async (input: {
+    name: string;
+    email: string;
+    password: string;
+    role: "caregiver" | "family_member" | "doctor";
+    licenseNumber?: string;
+  }) => {
+    setLoading(true);
+    try {
+      const payload = await apiRequest<{ session: AuthSession }>("/auth/signup", {
+        method: "POST",
+        body: JSON.stringify(input),
+      });
+      window.localStorage.setItem(authStorageKey, payload.session.token);
+      setSession(payload.session);
+      const bootstrapPayload = await apiRequest<BootstrapPayload>("/bootstrap");
+      setBootstrap(bootstrapPayload);
+      setError(null);
+      return payload.session;
+    } catch (nextError) {
+      window.localStorage.removeItem(authStorageKey);
+      setSession(null);
+      setBootstrap(null);
+      setError(nextError instanceof Error ? nextError.message : "We could not create your account right now.");
+      throw nextError;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const requestPasswordReset = useCallback(async (email: string) => {
+    return apiRequest<{ message: string }>("/auth/password-reset/request", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
+  }, []);
+
+  const confirmPasswordReset = useCallback(async (token: string, password: string) => {
+    return apiRequest<{ message: string }>("/auth/password-reset/confirm", {
+      method: "POST",
+      body: JSON.stringify({ token, password }),
+    });
   }, []);
 
   const logout = useCallback(async () => {
@@ -150,9 +204,12 @@ export const AppDataProvider = ({ children }: { children: React.ReactNode }) => 
       refresh,
       request: apiRequest,
       login,
+      signup,
+      requestPasswordReset,
+      confirmPasswordReset,
       logout,
     }),
-    [session, bootstrap, loading, error, refresh, login, logout],
+    [session, bootstrap, loading, error, refresh, login, signup, requestPasswordReset, confirmPasswordReset, logout],
   );
 
   return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>;

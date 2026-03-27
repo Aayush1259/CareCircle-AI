@@ -11,6 +11,7 @@ import type {
   DocumentRecord,
   EmergencyProtocolRecord,
   FamilyMemberRecord,
+  FamilyMessageRecord,
   HealthVitalsRecord,
   MedicationLogRecord,
   MedicationRecord,
@@ -82,6 +83,18 @@ export const buildDemoSnapshot = (): AppSnapshot => {
       phone: "(555) 777-4455",
       createdAt: isoDateTime(-60, 13),
       lastLogin: isoDateTime(-1, 9, 5),
+      notificationPreferences: viewer.notificationPreferences,
+    },
+    {
+      id: "user_doctor",
+      authUserId: "auth_demo_doctor",
+      email: "doctor@carecircle.ai",
+      name: "Dr. Robert Chen",
+      role: "doctor",
+      licenseNumber: "MED-48291",
+      phone: "(555) 234-5678",
+      createdAt: isoDateTime(-80, 10),
+      lastLogin: isoDateTime(-2, 14, 15),
       notificationPreferences: viewer.notificationPreferences,
     },
   ];
@@ -560,6 +573,27 @@ export const buildDemoSnapshot = (): AppSnapshot => {
     createdAt: isoDateTime(offsetDays, hour, minute),
   }));
 
+  const familyMessages: FamilyMessageRecord[] = [
+    {
+      id: uid("family_message", 1),
+      patientId: patient.id,
+      userId: "user_james",
+      userName: "James Martinez",
+      messageText: "I can handle the pharmacy pickup on Friday.",
+      createdAt: isoDateTime(-2, 10, 15),
+      isPinned: true,
+    },
+    {
+      id: uid("family_message", 2),
+      patientId: patient.id,
+      userId: viewer.id,
+      userName: viewer.name,
+      messageText: "Please keep an eye on evening confusion this week so I can tell the neurologist.",
+      createdAt: isoDateTime(-1, 19, 40),
+      isPinned: false,
+    },
+  ];
+
   const activitySeeds: Array<{
     userId: string;
     type: ActivityEventRecord["type"];
@@ -617,6 +651,7 @@ export const buildDemoSnapshot = (): AppSnapshot => {
     documents,
     appointments,
     familyMembers,
+    familyMessages,
     tasks,
     emergencyProtocols,
     healthVitals,
