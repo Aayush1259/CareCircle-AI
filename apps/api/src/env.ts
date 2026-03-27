@@ -2,6 +2,13 @@ import dotenv from "dotenv";
 
 dotenv.config({ path: "../../.env" });
 
+const resolveJwtSecret = () => {
+  const configuredSecret = process.env.JWT_SECRET?.trim();
+  if (configuredSecret) return configuredSecret;
+  if (process.env.NODE_ENV === "test") return "carecircle-test-secret";
+  throw new Error("JWT_SECRET is required.");
+};
+
 const normalizeOrigin = (value: string) => {
   const trimmed = value.trim();
   if (!trimmed) return null;
@@ -38,7 +45,7 @@ export const env = {
   supabaseAnonKey: process.env.SUPABASE_ANON_KEY,
   supabaseServiceKey: process.env.SUPABASE_SERVICE_KEY,
   storageBucket: process.env.SUPABASE_STORAGE_BUCKET ?? "carecircle-documents",
-  jwtSecret: process.env.JWT_SECRET ?? "carecircle-demo-secret",
+  jwtSecret: resolveJwtSecret(),
   smtpHost: process.env.SMTP_HOST,
   smtpPort: Number(process.env.SMTP_PORT ?? 587),
   smtpUser: process.env.SMTP_USER,

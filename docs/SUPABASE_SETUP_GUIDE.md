@@ -98,12 +98,12 @@ Open:
 
 Run these files one by one, in this exact order:
 
-1. [supabase/migrations/0001_init.sql](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/supabase/migrations/0001_init.sql)
-2. [supabase/migrations/0002_identity_access.sql](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/supabase/migrations/0002_identity_access.sql)
-3. [supabase/migrations/0003_clinical_audit.sql](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/supabase/migrations/0003_clinical_audit.sql)
-4. [supabase/migrations/0004_rls_identity_access.sql](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/supabase/migrations/0004_rls_identity_access.sql)
-5. [supabase/storage.sql](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/supabase/storage.sql)
-6. [supabase/seed.sql](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/supabase/seed.sql) if you want demo content
+1. [../supabase/migrations/0001_init.sql](../supabase/migrations/0001_init.sql)
+2. [../supabase/migrations/0002_identity_access.sql](../supabase/migrations/0002_identity_access.sql)
+3. [../supabase/migrations/0003_clinical_audit.sql](../supabase/migrations/0003_clinical_audit.sql)
+4. [../supabase/migrations/0004_rls_identity_access.sql](../supabase/migrations/0004_rls_identity_access.sql)
+5. [../supabase/storage.sql](../supabase/storage.sql)
+6. [../supabase/seed.sql](../supabase/seed.sql) if you want demo content
 
 ### What the new migrations add
 

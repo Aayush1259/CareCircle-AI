@@ -150,7 +150,7 @@ Use the current repo layout for Supabase setup:
 
 For the actual click-by-click dashboard setup, use:
 
-- [docs/SUPABASE_SETUP_GUIDE.md](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/docs/SUPABASE_SETUP_GUIDE.md)
+- [SUPABASE_SETUP_GUIDE.md](./SUPABASE_SETUP_GUIDE.md)
 
 Do not replace the repo with a conflicting `frontend/`-only structure.
 

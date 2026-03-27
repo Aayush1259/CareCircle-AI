@@ -116,7 +116,7 @@ export const DashboardPage = () => {
                 <div className="h-4 w-4/5 rounded-full bg-white/20" />
               </div>
             ) : (
-              <p className="mt-5 text-lg leading-8 text-white/90 break-words">{briefing}</p>
+              <p className="mt-5 text-lg leading-8 text-white/90 [overflow-wrap:anywhere]">{briefing}</p>
             )}
           </div>
           <Button variant="secondary" className="shrink-0 bg-white text-brandDark hover:bg-white/90" onClick={refreshBriefing} disabled={briefingLoading}>

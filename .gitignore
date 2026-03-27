@@ -24,3 +24,8 @@ Thumbs.db
 Api s.txt
 Supabase.txt
 *.log
+**/ts_out.txt
+**/tsc_errors.txt
+**/test_signup.js
+**/test_signup.json
+supabase_migrations.sql

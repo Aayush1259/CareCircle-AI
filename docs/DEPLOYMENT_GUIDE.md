@@ -50,7 +50,7 @@ Create a GitHub repository and push the current project so Netlify and your back
 
 ## 2. Prepare environment variables
 
-Use [.env.example](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/.env.example) as your backend checklist and [apps/web/.env.example](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/apps/web/.env.example) as your frontend checklist.
+Use [../.env.example](../.env.example) as your backend checklist and [../apps/web/.env.example](../apps/web/.env.example) as your frontend checklist.
 
 ### Frontend environment variables
 
@@ -81,14 +81,14 @@ Use [.env.example](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/.env.exampl
 In your Supabase project:
 
 1. Create a new project
-2. Follow the full click-by-click setup in [docs/SUPABASE_SETUP_GUIDE.md](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/docs/SUPABASE_SETUP_GUIDE.md)
+2. Follow the full click-by-click setup in [SUPABASE_SETUP_GUIDE.md](./SUPABASE_SETUP_GUIDE.md)
 3. Run the migration set in order:
-   - [0001_init.sql](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/supabase/migrations/0001_init.sql)
-   - [0002_identity_access.sql](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/supabase/migrations/0002_identity_access.sql)
-   - [0003_clinical_audit.sql](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/supabase/migrations/0003_clinical_audit.sql)
-   - [0004_rls_identity_access.sql](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/supabase/migrations/0004_rls_identity_access.sql)
-   - [storage.sql](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/supabase/storage.sql)
-   - [seed.sql](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/supabase/seed.sql) if you want demo data
+   - [0001_init.sql](../supabase/migrations/0001_init.sql)
+   - [0002_identity_access.sql](../supabase/migrations/0002_identity_access.sql)
+   - [0003_clinical_audit.sql](../supabase/migrations/0003_clinical_audit.sql)
+   - [0004_rls_identity_access.sql](../supabase/migrations/0004_rls_identity_access.sql)
+   - [storage.sql](../supabase/storage.sql)
+   - [seed.sql](../supabase/seed.sql) if you want demo data
 
 ## Deploy the backend first
 
@@ -139,7 +139,7 @@ The same build logic applies:
 
 ## Netlify settings
 
-This repo now includes [netlify.toml](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/netlify.toml), so you can use the repo root and let Netlify read the config.
+This repo now includes [../netlify.toml](../netlify.toml), so you can use the repo root and let Netlify read the config.
 
 ### Netlify config summary
 

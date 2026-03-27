@@ -155,14 +155,13 @@ export const FamilyPage = () => {
   const sendFamilyMessage = async () => {
     if (!newMessage.trim()) return;
     try {
-      await request("/family/messages", {
+      const payload = await request<{ message: FamilyMessageRecord }>("/family/messages", {
         method: "POST",
         body: JSON.stringify({ messageText: newMessage }),
       });
-      const payload = await request<{ messages: FamilyMessageRecord[] }>("/family/messages");
-      setFamilyMessages(payload.messages);
+      setFamilyMessages((current) => [...current, payload.message]);
       setNewMessage("");
-      await refresh();
+      void refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Please try again.");
     }
@@ -555,7 +554,7 @@ export const FamilyPage = () => {
                     ) : null}
                   </div>
 
-                  <Droppable droppableId={column.id}>
+                  <Droppable droppableId={column.id} isDropDisabled={!canManageTasks}>
                     {(provided: DroppableProvided, snapshot: DroppableStateSnapshot) => (
                       <div
                         ref={provided.innerRef}
@@ -571,7 +570,7 @@ export const FamilyPage = () => {
                         {items.map((task, index) => {
                           const assignedMember = activeMembers.find((member) => (member.userId ?? member.id) === task.assignedTo);
                           return (
-                            <Draggable key={task.id} draggableId={task.id} index={index}>
+                            <Draggable key={task.id} draggableId={task.id} index={index} isDragDisabled={!canManageTasks}>
                               {(dragProvided: DraggableProvided, dragSnapshot: DraggableStateSnapshot) => (
                                 <button
                                   type="button"

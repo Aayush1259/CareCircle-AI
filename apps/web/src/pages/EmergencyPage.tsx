@@ -29,6 +29,7 @@ export const EmergencyPage = () => {
   const { patient, data } = bootstrap;
   const canShareEmergency = bootstrap.capabilities.includes("share_emergency");
   const canViewInsurance = bootstrap.capabilities.includes("view_insurance");
+  const canSeeMedicationDetails = bootstrap.viewerAccess?.accessRole !== "family_member";
   const activeMedications = data.medications.filter((item) => item.isActive);
   const shareableFamily = data.familyMembers.filter((member) => member.joinStatus === "active" && member.email);
   const primaryProtocolId = data.emergencyProtocols[0]?.id ?? "";
@@ -309,7 +310,7 @@ export const EmergencyPage = () => {
                     <th className="pb-2 pr-4">Name</th>
                     <th className="pb-2 pr-4">Dose</th>
                     <th className="pb-2 pr-4">Frequency</th>
-                    <th className="pb-2 pr-4">Purpose</th>
+                    {canSeeMedicationDetails ? <th className="pb-2 pr-4">Purpose</th> : null}
                   </tr>
                 </thead>
                 <tbody>
@@ -318,7 +319,7 @@ export const EmergencyPage = () => {
                       <td className="py-2 pr-4">{medication.name}</td>
                       <td className="py-2 pr-4">{medication.doseAmount}{medication.doseUnit}</td>
                       <td className="py-2 pr-4">{medication.frequency}</td>
-                      <td className="py-2 pr-4">{medication.purpose}</td>
+                      {canSeeMedicationDetails ? <td className="py-2 pr-4">{medication.purpose}</td> : null}
                     </tr>
                   ))}
                 </tbody>

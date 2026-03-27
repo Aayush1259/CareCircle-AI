@@ -8,7 +8,7 @@ The target user is intentionally non-technical. Every screen is meant to feel un
 
 ## Canonical build prompt
 
-The current authoritative build prompt for this repository is documented in [FINAL_PRODUCTION_BUILD_PROMPT.md](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/docs/FINAL_PRODUCTION_BUILD_PROMPT.md).
+The current authoritative build prompt for this repository is documented in [FINAL_PRODUCTION_BUILD_PROMPT.md](./FINAL_PRODUCTION_BUILD_PROMPT.md).
 
 It is adapted to the actual monorepo and secure secret model used in this project.
 
@@ -271,7 +271,7 @@ The API is grouped by feature area rather than by technical layer.
 - Notifications
 - Exports
 
-See [server.ts](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/apps/api/src/server.ts) for the current route inventory.
+See [../apps/api/src/server.ts](../apps/api/src/server.ts) for the current route inventory.
 
 ## AI-assisted features
 
@@ -332,7 +332,7 @@ The login flow requires the backend API to be running. The frontend alone cannot
 
 ## Environment variables
 
-Current required and optional variables are listed in [.env.example](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/.env.example).
+Current required and optional variables are listed in [../.env.example](../.env.example).
 
 ### Key groups
 
@@ -441,11 +441,11 @@ No, not yet.
 
 ## Key files to know
 
-- [README.md](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/README.md)
-- [server.ts](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/apps/api/src/server.ts)
-- [App.tsx](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/apps/web/src/App.tsx)
-- [AppDataContext.tsx](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/apps/web/src/context/AppDataContext.tsx)
-- [types.ts](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/packages/shared/src/types.ts)
-- [0001_init.sql](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/supabase/migrations/0001_init.sql)
-- [seed.sql](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/supabase/seed.sql)
-- [storage.sql](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/supabase/storage.sql)
+- [../README.md](../README.md)
+- [../apps/api/src/server.ts](../apps/api/src/server.ts)
+- [../apps/web/src/App.tsx](../apps/web/src/App.tsx)
+- [../apps/web/src/context/AppDataContext.tsx](../apps/web/src/context/AppDataContext.tsx)
+- [../packages/shared/src/types.ts](../packages/shared/src/types.ts)
+- [../supabase/migrations/0001_init.sql](../supabase/migrations/0001_init.sql)
+- [../supabase/seed.sql](../supabase/seed.sql)
+- [../supabase/storage.sql](../supabase/storage.sql)

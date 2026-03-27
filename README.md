@@ -1,162 +1,157 @@
 # CareCircle AI
 
-CareCircle AI is a calm, compassionate full-stack web application for family caregivers. It turns medication tracking, care journaling, document interpretation, family coordination, emergency planning, and AI support into one simple command center that a non-technical caregiver can understand in seconds.
+CareCircle AI is a caregiver-focused full-stack web app for tracking medications, symptoms, documents, appointments, family coordination, and emergency information in one calm, mobile-friendly workspace.
 
-## Documentation index
+The project is set up as a TypeScript monorepo with:
 
-- Full project documentation: [docs/PROJECT_DOCUMENTATION.md](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/docs/PROJECT_DOCUMENTATION.md)
-- Prompt history and issue log: [docs/PROMPT_HISTORY_AND_ISSUE_LOG.md](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/docs/PROMPT_HISTORY_AND_ISSUE_LOG.md)
-- Deployment guide: [docs/DEPLOYMENT_GUIDE.md](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/docs/DEPLOYMENT_GUIDE.md)
-- Supabase setup guide: [docs/SUPABASE_SETUP_GUIDE.md](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/docs/SUPABASE_SETUP_GUIDE.md)
-- Secrets and GitHub setup: [docs/SECRETS_AND_GITHUB_SETUP.md](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/docs/SECRETS_AND_GITHUB_SETUP.md)
-- Final build prompt for this repo: [docs/FINAL_PRODUCTION_BUILD_PROMPT.md](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/docs/FINAL_PRODUCTION_BUILD_PROMPT.md)
+- `apps/web`: React + Vite frontend
+- `apps/api`: Express API
+- `packages/shared`: shared types, permissions, and demo data
+- `supabase/`: database migrations, seed data, and storage setup
 
-## The problem
+## Live deployment
 
-Family caregivers are often managing medications, symptoms, appointments, paperwork, and family updates across text threads, notebooks, and memory. That creates stress, missed details, and avoidable risk.
+- Frontend: [https://carecircle-ai.netlify.app/](https://carecircle-ai.netlify.app/)
+- Backend: deployed separately on Render
+- Auth, database, and storage: Supabase
 
-CareCircle AI solves that by bringing the most important caregiving tasks into one clear, mobile-friendly workflow:
+## Highlights
 
-- Daily AI briefing with what matters today
-- Medication schedule, adherence tracking, refill reminders, and interaction checks
-- Care journal with AI pattern analysis
-- Document upload with OCR and plain-English summaries
-- Appointments with AI preparation support
-- Health vitals logging and AI trend interpretation
-- Family coordination board, shared updates, and chat
-- One-tap emergency access with personalized protocols
-- Warm AI caregiver chat and emotional check-ins
-
-## Target user
-
-- Primary user: a 45-year-old daughter caring for her 78-year-old father
-- Secondary users: siblings, home health aides, family helpers
-- Design goal: every screen should feel understandable in under 10 seconds
-
-## Screens and features
-
-- Onboarding: 6-step setup flow with optional first medication and family invite
-- Dashboard: daily briefing, stats, quick actions, medication timeline, appointments, AI insights, activity feed
-- Medications: adherence, weekly chart, today schedule, list, interaction checker, refill tracker
-- Care Journal: searchable entries, AI entry analysis, 30-day pattern report
-- Documents: drag-and-drop upload, OCR/PDF parsing, AI summary, action items, medical term glossary
-- Appointments: month calendar, upcoming list, AI question suggestions, follow-up capture
-- Health Vitals: trend cards, charts, normal ranges, AI reading analysis
-- Family Hub: members, invite flow, shared activity feed, reactions, coordination board, family chat
-- Tasks: today/week/overdue views, AI task suggestions, assignments and recurrence
-- Emergency: one-tap help, personalized protocols, QR sharing, printable emergency card
-- Care Chat: floating patient-aware AI assistant, saved sessions, suggested prompts, caregiver check-ins
-- Settings: profile, notifications, display accessibility, exports, help links, feedback
-- Real login gate: demo-safe auth flow with `demo@carecircle.ai / Demo1234`
-
-## Screenshots
-
-Add final screenshots here before submission:
-
-- `docs/screenshots/dashboard.png`
-- `docs/screenshots/medications.png`
-- `docs/screenshots/journal.png`
-- `docs/screenshots/documents.png`
-- `docs/screenshots/appointments.png`
-- `docs/screenshots/family.png`
-- `docs/screenshots/emergency.png`
-- `docs/screenshots/care-chat.png`
+- Daily caregiver dashboard with AI briefing and quick actions
+- Medication schedule, adherence logging, refill tracking, and interaction checks
+- Care journal with AI-assisted analysis
+- Document upload with OCR, summaries, and follow-up actions
+- Appointments, vitals, family coordination, tasks, and emergency workflows
+- Role-aware access for caregivers, family members, and clinicians
 
 ## Tech stack
 
-- Frontend: React 18, Vite, Tailwind CSS, Framer Motion, React Router v6, Lucide React, React Hot Toast, Chart.js, jsPDF, qrcode.react
-- Backend: Node.js, Express, Supabase-backed auth/storage hooks, OpenAI-ready AI service layer, Multer, pdf-parse, Tesseract.js, node-cron, Nodemailer
-- Database: Supabase PostgreSQL schema and seed SQL included under `supabase/`
-- Deployment targets: Netlify for web, Render for API, Supabase for database/storage
+- Frontend: React 18, Vite, Tailwind CSS, Framer Motion, React Router, Chart.js
+- Backend: Node.js, Express, TypeScript, Supabase integrations, OpenAI-ready service layer
+- Tooling: npm workspaces, Vitest, Playwright, tsup
+- Data: Supabase PostgreSQL, storage, and auth
 
-## Demo account
+## Quick start
+
+1. Install dependencies:
+
+```bash
+npm install
+```
+
+2. Copy `.env.example` to `.env`.
+3. Set a real `JWT_SECRET` before starting the API.
+4. Add the Supabase and frontend/backend environment variables you have available.
+5. Start the app:
+
+```bash
+npm run dev
+```
+
+6. Open `http://localhost:5173/login`
+
+Demo login:
 
 - Email: `demo@carecircle.ai`
 - Password: `Demo1234`
 
-## Current status
+If OpenAI, SMTP, or Supabase credentials are missing, the app can still run in demo-safe fallback mode.
 
-- Strong portfolio and judge demo project
-- Publicly deployable as a beta/demo
-- Not yet a fully hardened healthcare-grade production product
+## Scripts
 
-## Local setup
+At the repo root:
 
-1. Copy `.env.example` to `.env` and fill in the keys you have.
-2. Run `npm install`.
-3. Run `npm run dev`.
-4. Open `http://localhost:5173/login` and sign in with `demo@carecircle.ai / Demo1234`.
-5. Optional but recommended: follow [docs/SUPABASE_SETUP_GUIDE.md](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/docs/SUPABASE_SETUP_GUIDE.md) and apply the production migration set in Supabase.
+- `npm run dev`: start web and API together
+- `npm run build`: build shared, API, and web
+- `npm run test`: run API and web unit tests
+- `npm run test:e2e`: run Playwright end-to-end checks
 
-If OpenAI, SMTP, or Supabase keys are missing, the app still runs in demo-safe fallback mode with seeded data and the same demo login.
+## Environment variables
 
-## Project structure
-
-```text
-apps/
-  api/        Express API, AI services, uploads, cron, exports
-  web/        React app, routing, UI, charts, modals, responsive shell
-packages/
-  shared/     Shared types and demo seed builders
-supabase/
-  migrations/ Database schema
-  seed.sql    Demo data
-  storage.sql Storage bucket and policies
-```
-
-## Deployment
-
-### Netlify frontend + separate backend
-
-- Frontend can be deployed to Netlify using the included [netlify.toml](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/netlify.toml)
-- Backend must still be deployed separately because the current architecture uses an Express API
-- No custom domain is required; free platform URLs are enough for demos and public review
-- Full instructions: [docs/DEPLOYMENT_GUIDE.md](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/docs/DEPLOYMENT_GUIDE.md)
-- Supabase click-by-click setup: [docs/SUPABASE_SETUP_GUIDE.md](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/docs/SUPABASE_SETUP_GUIDE.md)
-
-### Frontend env vars
+Frontend:
 
 - `VITE_API_URL`
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
 
-### Backend env vars
+Backend:
 
-- `OPENAI_API_KEY`
-- `OPENAI_MODEL`
+- `JWT_SECRET`
+- `FRONTEND_URL`
+- `BACKEND_URL`
+- `PORT`
 - `SUPABASE_URL`
 - `SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_KEY`
-- `JWT_SECRET`
+- `SUPABASE_STORAGE_BUCKET`
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL`
 - `SMTP_HOST`
 - `SMTP_PORT`
 - `SMTP_USER`
 - `SMTP_PASS`
 - `SMTP_FROM`
-- `FRONTEND_URL`
-- `BACKEND_URL`
-- `SUPABASE_STORAGE_BUCKET`
-- `PORT`
 
-## Live demo
+For the live frontend deployment, make sure backend `FRONTEND_URL` includes:
 
-- Frontend URL: add your deployed Netlify or Vercel link here
-- Backend URL: add your deployed API link here
+- `https://carecircle-ai.netlify.app`
 
-## Demo video
+## Project structure
 
-- Loom: add your published Loom demo link here
+```text
+apps/
+  api/          Express API, auth/session logic, exports, AI/document services
+  web/          React app, routes, pages, shell, and tests
+packages/
+  shared/       Shared types, permissions, helpers, demo snapshot
+scripts/        Repo helpers including the E2E runner
+supabase/
+  migrations/   Database schema
+  seed.sql      Demo seed data
+  storage.sql   Storage setup
+docs/           Deployment, setup, and project notes
+```
 
-## Tests
+## Testing
 
-- Frontend component tests: Vitest + React Testing Library
-- API tests: Vitest + Supertest
-- Judge-critical browser checks: Playwright
+- Unit/integration: Vitest
+- Browser checks: Playwright
 
-## Future roadmap
+Verified locally with:
 
-- Richer Supabase Auth account recovery and invite acceptance
-- Push notifications and SMS reminders
-- Richer family permissions and audit logs
-- Medical device integrations for automatic vitals import
-- Smarter longitudinal AI summarization with clinician-approved guardrails
+- `npm run test`
+- `npm run build`
+- `npm run test:e2e`
+
+## Deployment notes
+
+- The frontend is intended for Netlify and uses [`netlify.toml`](./netlify.toml).
+- The API is intended for Render as a separate service.
+- Supabase is the source of truth for auth, storage, and database state.
+- `JWT_SECRET` is required outside tests.
+
+## Documentation
+
+- [Project documentation](./docs/PROJECT_DOCUMENTATION.md)
+- [Deployment guide](./docs/DEPLOYMENT_GUIDE.md)
+- [Supabase setup guide](./docs/SUPABASE_SETUP_GUIDE.md)
+- [Secrets and GitHub setup](./docs/SECRETS_AND_GITHUB_SETUP.md)
+- [Prompt history and issue log](./docs/PROMPT_HISTORY_AND_ISSUE_LOG.md)
+
+## Recent hardening
+
+This repo now includes a security and cleanup pass that:
+
+- removes the unsafe token-length auth bypass
+- requires `JWT_SECRET` outside tests
+- redacts demo bootstrap data by role
+- tightens document and journal access behavior
+- cleans stale local/dev artifacts from version control
+- aligns the README and config with the live Netlify + Render + Supabase deployment
+
+## Roadmap
+
+- Further split large API route logic into smaller modules
+- Add a more distinct secondary-caregiver dashboard experience
+- Improve frontend code-splitting to reduce the main bundle size
+- Expand Supabase-native invite, recovery, and realtime flows

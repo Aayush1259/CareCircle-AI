@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Download, ExternalLink, PlayCircle, Send, Trash2, ShieldAlert } from "lucide-react";
 import toast from "react-hot-toast";
@@ -50,6 +50,7 @@ export const SettingsPage = () => {
   const [feedbackForm, setFeedbackForm] = useState(initialFeedback);
   const [savedToggleKey, setSavedToggleKey] = useState("");
   const [feedbackSaving, setFeedbackSaving] = useState(false);
+  const blockedTabRef = useRef<string | null>(null);
 
   // Tabbed layout state
   const activeTab = params.get("tab") || "profile";
@@ -82,8 +83,14 @@ export const SettingsPage = () => {
 
   useEffect(() => {
     if ((activeTab === "team" && !canManageFamily) || (activeTab === "patient" && !canEditPatient)) {
+      if (blockedTabRef.current !== activeTab) {
+        blockedTabRef.current = activeTab;
+        toast.error("That settings section isn't available for this role.");
+      }
       setParams({ tab: "profile" }, { replace: true });
+      return;
     }
+    blockedTabRef.current = null;
   }, [activeTab, canEditPatient, canManageFamily, setParams]);
 
   if (!bootstrap || !currentSettings) return null;

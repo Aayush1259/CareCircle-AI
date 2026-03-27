@@ -12,13 +12,14 @@ let API_PORT = 4400;
 let WEB_PORT = 4173;
 let WEB_URL = `http://127.0.0.1:${WEB_PORT}`;
 let API_URL = `http://127.0.0.1:${API_PORT}`;
+const useShell = (command) => process.platform === "win32" && /\.(cmd|bat)$/i.test(command);
 
-const run = (command, args, label, extraEnv = {}) =>
+const run = (command, args, label, extraEnv = {}, cwd = root) =>
   new Promise((resolve, reject) => {
     const child = spawn(command, args, {
-      cwd: root,
+      cwd,
       stdio: "inherit",
-      shell: process.platform === "win32",
+      shell: useShell(command),
       env: {
         ...process.env,
         ...extraEnv,
@@ -30,11 +31,11 @@ const run = (command, args, label, extraEnv = {}) =>
     });
   });
 
-const start = (command, args, label, extraEnv = {}) => {
+const start = (command, args, label, extraEnv = {}, cwd = root) => {
   const child = spawn(command, args, {
-    cwd: root,
+    cwd,
     stdio: "inherit",
-    shell: process.platform === "win32",
+    shell: useShell(command),
     env: {
       ...process.env,
       ...extraEnv,
@@ -140,15 +141,16 @@ try {
     PORT: String(API_PORT),
     BACKEND_URL: API_URL,
     FRONTEND_URL: WEB_URL,
+    JWT_SECRET: process.env.JWT_SECRET || "carecircle-e2e-secret",
+    NODE_ENV: process.env.NODE_ENV || "test",
   });
-  start(npmCmd, ["--workspace", "@carecircle/web", "run", "preview", "--", "--host", "127.0.0.1", "--port", String(WEB_PORT), "--strictPort"], "Web preview");
+  const viteCli = path.join(root, "apps", "web", "node_modules", "vite", "bin", "vite.js");
+  start("node", [viteCli, "preview", "--host", "127.0.0.1", "--port", String(WEB_PORT), "--strictPort"], "Web preview", {}, path.join(root, "apps", "web"));
 
   await Promise.all([waitForPort(API_PORT), waitForPort(WEB_PORT)]);
 
-  const playwrightCmd = process.platform === "win32"
-    ? path.join(root, "apps", "web", "node_modules", ".bin", "playwright.cmd")
-    : path.join(root, "apps", "web", "node_modules", ".bin", "playwright");
-  await run(playwrightCmd, ["test", "--config", "apps/web/playwright.config.ts"], "Playwright", {
+  const playwrightCli = path.join(root, "apps", "web", "node_modules", "@playwright", "test", "cli.js");
+  await run("node", [playwrightCli, "test", "--config", "apps/web/playwright.config.ts"], "Playwright", {
     PLAYWRIGHT_BASE_URL: WEB_URL,
   });
   stopAll();

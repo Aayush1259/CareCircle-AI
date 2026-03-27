@@ -52,6 +52,7 @@ export const JournalPage = () => {
         : ["log_journal", "view_ai_insights"]);
   const canLogJournal = capabilities.includes("log_journal");
   const canViewAiInsights = capabilities.includes("view_ai_insights");
+  const canAnalyzeEntries = canViewAiInsights && canLogJournal;
 
   const entries = useMemo(() => {
     return bootstrap.data.careJournal.filter((entry) => {
@@ -194,7 +195,7 @@ export const JournalPage = () => {
             <SectionHeader
               title={selectedEntry.entryTitle}
               description={`${formatDate(selectedEntry.date)} at ${selectedEntry.time} | ${relativeTime(selectedEntry.createdAt)}`}
-              action={canViewAiInsights ? (
+              action={canAnalyzeEntries ? (
                 <Button variant="secondary" onClick={() => analyzeEntry(selectedEntry)}>
                   <Sparkles className="h-4 w-4" />
                   AI analysis

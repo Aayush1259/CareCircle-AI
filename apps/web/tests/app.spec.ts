@@ -33,7 +33,7 @@ test.describe("mobile UX safeguards", () => {
     expect(briefingMetrics.scrollWidth).toBeLessThanOrEqual(briefingMetrics.clientWidth + 1);
     expect(["anywhere", "break-word"]).toContain(briefingMetrics.overflowWrap);
 
-    await page.goto("/settings");
+    await page.goto("/settings?tab=security");
     const exportButton = page.getByRole("button", { name: "Export My Data" });
     await exportButton.scrollIntoViewIfNeeded();
     await expect(exportButton).toBeVisible();

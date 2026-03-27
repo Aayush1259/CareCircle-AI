@@ -10,25 +10,27 @@ import { resolveViewerRole } from "@/lib/roles";
 import { hasText, trimmedText } from "@/lib/validation";
 
 const tabs = ["Today's Schedule", "All Medications", "Interaction Checker", "Refill Tracker"] as const;
+const emptyMedicationForm = {
+  name: "",
+  doseAmount: "",
+  doseUnit: "mg",
+  frequency: "once",
+  purpose: "",
+  instructions: "",
+  refillDate: "",
+  pharmacyName: "",
+  pharmacyPhone: "",
+};
 
 export const MedicationsPage = () => {
   const { bootstrap, request, refresh } = useAppData();
   const [tab, setTab] = useState<(typeof tabs)[number]>("Today's Schedule");
   const [modalOpen, setModalOpen] = useState(false);
+  const [editingMedicationId, setEditingMedicationId] = useState<string | null>(null);
   const [filter, setFilter] = useState("active");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [interactionResult, setInteractionResult] = useState<Array<{ title: string; severity: string; explanation: string; next_steps: string }> | null>(null);
-  const [form, setForm] = useState({
-    name: "",
-    doseAmount: "",
-    doseUnit: "mg",
-    frequency: "once",
-    purpose: "",
-    instructions: "",
-    refillDate: "",
-    pharmacyName: "",
-    pharmacyPhone: "",
-  });
+  const [form, setForm] = useState(emptyMedicationForm);
 
   if (!bootstrap) return null;
 
@@ -78,6 +80,34 @@ export const MedicationsPage = () => {
     });
   }, [data.medicationLogs]);
 
+  const closeModal = () => {
+    setModalOpen(false);
+    setEditingMedicationId(null);
+    setForm(emptyMedicationForm);
+  };
+
+  const openCreateModal = () => {
+    setEditingMedicationId(null);
+    setForm(emptyMedicationForm);
+    setModalOpen(true);
+  };
+
+  const openEditModal = (medication: MedicationRecord) => {
+    setEditingMedicationId(medication.id);
+    setForm({
+      name: medication.name,
+      doseAmount: medication.doseAmount,
+      doseUnit: medication.doseUnit,
+      frequency: medication.frequency,
+      purpose: medication.purpose,
+      instructions: medication.instructions,
+      refillDate: medication.refillDate,
+      pharmacyName: medication.pharmacyName,
+      pharmacyPhone: medication.pharmacyPhone,
+    });
+    setModalOpen(true);
+  };
+
   const handleSave = async () => {
     const name = trimmedText(form.name);
     const doseAmount = trimmedText(form.doseAmount);
@@ -87,8 +117,8 @@ export const MedicationsPage = () => {
     }
 
     try {
-      await request("/medications", {
-        method: "POST",
+      await request(editingMedicationId ? `/medications/${editingMedicationId}` : "/medications", {
+        method: editingMedicationId ? "PATCH" : "POST",
         body: JSON.stringify({
           ...form,
           name,
@@ -101,19 +131,8 @@ export const MedicationsPage = () => {
           timesOfDay: form.frequency === "twice" ? ["morning", "evening"] : ["morning"],
         }),
       });
-      toast.success("Medication saved.");
-      setModalOpen(false);
-      setForm({
-        name: "",
-        doseAmount: "",
-        doseUnit: "mg",
-        frequency: "once",
-        purpose: "",
-        instructions: "",
-        refillDate: "",
-        pharmacyName: "",
-        pharmacyPhone: "",
-      });
+      toast.success(editingMedicationId ? "Medication updated." : "Medication saved.");
+      closeModal();
       await refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Please try again.");
@@ -146,6 +165,19 @@ export const MedicationsPage = () => {
         },
       );
       setInteractionResult(result.interactions);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Please try again.");
+    }
+  };
+
+  const deactivateMedication = async (medicationId: string) => {
+    try {
+      await request(`/medications/${medicationId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ isActive: false }),
+      });
+      toast.success("Medication deactivated.");
+      await refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Please try again.");
     }
@@ -187,7 +219,7 @@ export const MedicationsPage = () => {
                 ? "Family access stays focused on today's schedule and logging that your caregiver enabled."
                 : "Seven days of progress, so trends stay simple."
             }
-            action={canManageMedications ? <Button onClick={() => setModalOpen(true)}>+ Add Medication</Button> : undefined}
+            action={canManageMedications ? <Button onClick={openCreateModal}>+ Add Medication</Button> : undefined}
           />
           <BarChart
             data={{
@@ -231,7 +263,7 @@ export const MedicationsPage = () => {
         </Card>
       ) : null}
 
-      <div className="flex snap-x gap-2 overflow-x-auto pb-2 scrollbar-thin">
+      <div className={availableTabs.length <= 2 ? "flex flex-wrap gap-2" : "flex snap-x gap-2 overflow-x-auto pb-2 scrollbar-thin"}>
         {availableTabs.map((item) => (
           <button
             key={item}
@@ -338,8 +370,8 @@ export const MedicationsPage = () => {
                         </Badge>
                         {canManageMedications ? (
                           <div className="flex gap-2">
-                            <Button variant="ghost">Edit</Button>
-                            <Button variant="secondary">Deactivate</Button>
+                            <Button variant="ghost" onClick={() => openEditModal(medication)}>Edit</Button>
+                            <Button variant="secondary" onClick={() => void deactivateMedication(medication.id)}>Deactivate</Button>
                           </div>
                         ) : null}
                       </div>
@@ -441,7 +473,7 @@ export const MedicationsPage = () => {
         </Card>
       ) : null}
 
-      <Modal open={modalOpen && canManageMedications} title="Add medication" onClose={() => setModalOpen(false)}>
+      <Modal open={modalOpen && canManageMedications} title={editingMedicationId ? "Edit medication" : "Add medication"} onClose={closeModal}>
         <form
           className="grid gap-4"
           onSubmit={(event) => {
@@ -490,8 +522,8 @@ export const MedicationsPage = () => {
             </Field>
           </div>
           <div className="flex justify-end gap-3">
-            <Button type="button" variant="ghost" onClick={() => setModalOpen(false)}>Cancel</Button>
-            <Button type="submit">Save medication</Button>
+            <Button type="button" variant="ghost" onClick={closeModal}>Cancel</Button>
+            <Button type="submit">{editingMedicationId ? "Save changes" : "Save medication"}</Button>
           </div>
         </form>
       </Modal>

@@ -21,6 +21,7 @@ const maxFileSize = 20 * 1024 * 1024;
 
 export const DocumentsPage = () => {
   const { bootstrap, request, refresh } = useAppData();
+  const [documentItems, setDocumentItems] = useState<DocumentRecord[]>(() => bootstrap?.data.documents ?? []);
   const [selectedDocument, setSelectedDocument] = useState<DocumentRecord | null>(null);
   const [selectedDocumentUrl, setSelectedDocumentUrl] = useState("");
   const [selectedDocumentUrlLoading, setSelectedDocumentUrlLoading] = useState(false);
@@ -39,9 +40,16 @@ export const DocumentsPage = () => {
 
   if (!bootstrap) return null;
 
-  const hasProcessingDocuments = bootstrap.data.documents.some((document) =>
+  const hasProcessingDocuments = documentItems.some((document) =>
     document.processingStatus === "queued" || document.processingStatus === "processing",
   );
+
+  useEffect(() => {
+    setDocumentItems(bootstrap.data.documents);
+    if (!selectedDocument) return;
+    const nextSelectedDocument = bootstrap.data.documents.find((document) => document.id === selectedDocument.id) ?? null;
+    setSelectedDocument(nextSelectedDocument);
+  }, [bootstrap.data.documents, selectedDocument?.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -87,10 +95,20 @@ export const DocumentsPage = () => {
   useEffect(() => {
     if (!hasProcessingDocuments) return undefined;
     const timeout = window.setTimeout(() => {
-      void refresh();
+      void (async () => {
+        try {
+          const payload = await request<{ documents: DocumentRecord[] }>("/documents");
+          setDocumentItems(payload.documents);
+          if (selectedDocument) {
+            setSelectedDocument(payload.documents.find((document) => document.id === selectedDocument.id) ?? null);
+          }
+        } catch {
+          void refresh();
+        }
+      })();
     }, 3000);
     return () => window.clearTimeout(timeout);
-  }, [hasProcessingDocuments, refresh]);
+  }, [hasProcessingDocuments, refresh, request, selectedDocument]);
 
   const validateFile = (file?: File | null) => {
     if (!file) return null;
@@ -169,7 +187,7 @@ export const DocumentsPage = () => {
 
   const documents = useMemo(() => {
     const now = Date.now();
-    return [...bootstrap.data.documents]
+    return [...documentItems]
       .filter((document) => {
         const searchValue = search.toLowerCase();
         const matchesSearch =
@@ -195,7 +213,7 @@ export const DocumentsPage = () => {
         if (sort === "alphabetical") return left.fileName.localeCompare(right.fileName);
         return right.uploadDate.localeCompare(left.uploadDate);
       });
-  }, [bootstrap.data.documents, categoryFilter, dateRange, search, sort]);
+  }, [categoryFilter, dateRange, documentItems, search, sort]);
 
   const getProcessingBadge = (document: DocumentRecord) => {
     if (document.processingStatus === "failed") return { tone: "danger" as const, label: "Processing failed" };

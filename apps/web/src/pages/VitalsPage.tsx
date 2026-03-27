@@ -44,7 +44,7 @@ export const VitalsPage = () => {
       : ["log_vitals", "view_ai_insights"]);
   const canLogVitals = capabilities.includes("log_vitals");
   const canViewAiInsights = capabilities.includes("view_ai_insights");
-  const canViewRawVitals = bootstrap.permissions?.canViewVitalsRaw ?? viewerRole !== "family_member";
+  const canViewRawVitals = bootstrap.permissions?.canViewVitalsRaw ?? false;
   const trendOnlyView = viewerRole === "family_member" && !canViewRawVitals;
   const vitals = bootstrap.data.healthVitals;
   const latest = vitals[0];
@@ -290,32 +290,30 @@ export const VitalsPage = () => {
         </Card>
       ) : null}
 
-      <Card>
-        <SectionHeader
-          title="Normal range reference"
-          description={
-            trendOnlyView
-              ? "General guidance stays visible, but this role still cannot open exact patient readings."
-              : "A calm reminder of what most common ranges usually look like."
-          }
-        />
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-left text-sm">
-            <thead>
-              <tr className="text-textSecondary">
-                <th className="pb-3 pr-4">Vital</th>
-                <th className="pb-3 pr-4">Typical range</th>
-                <th className="pb-3 pr-4">Note</th>
-              </tr>
-            </thead>
-            <tbody className="text-textPrimary">
-              <tr><td className="py-2 pr-4">Blood pressure</td><td className="py-2 pr-4">Below 130/80 is often a common goal</td><td className="py-2 pr-4">Follow the doctor's target for Ellie.</td></tr>
-              <tr><td className="py-2 pr-4">Blood sugar</td><td className="py-2 pr-4">Often 80-180 mg/dL depending on timing</td><td className="py-2 pr-4">Targets vary by age and health conditions.</td></tr>
-              <tr><td className="py-2 pr-4">O2 saturation</td><td className="py-2 pr-4">95% or higher</td><td className="py-2 pr-4">Lower numbers can need attention.</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </Card>
+      {!trendOnlyView ? (
+        <Card>
+          <SectionHeader
+            title="Normal range reference"
+            description="A calm reminder of what most common ranges usually look like."
+          />
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead>
+                <tr className="text-textSecondary">
+                  <th className="pb-3 pr-4">Vital</th>
+                  <th className="pb-3 pr-4">Typical range</th>
+                  <th className="pb-3 pr-4">Note</th>
+                </tr>
+              </thead>
+              <tbody className="text-textPrimary">
+                <tr><td className="py-2 pr-4">Blood pressure</td><td className="py-2 pr-4">Below 130/80 is often a common goal</td><td className="py-2 pr-4">Follow the doctor's target for Ellie.</td></tr>
+                <tr><td className="py-2 pr-4">Blood sugar</td><td className="py-2 pr-4">Often 80-180 mg/dL depending on timing</td><td className="py-2 pr-4">Targets vary by age and health conditions.</td></tr>
+                <tr><td className="py-2 pr-4">O2 saturation</td><td className="py-2 pr-4">95% or higher</td><td className="py-2 pr-4">Lower numbers can need attention.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      ) : null}
 
       <Modal open={modalOpen && canLogVitals} title="Log vitals" onClose={() => setModalOpen(false)}>
         <form

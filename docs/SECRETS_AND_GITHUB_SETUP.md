@@ -77,11 +77,11 @@ This repo is a monorepo and does **not** use a `frontend/` folder. The correct p
 
 ### Safe frontend env example
 
-Use [apps/web/.env.example](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/apps/web/.env.example) as the frontend template.
+Use [../apps/web/.env.example](../apps/web/.env.example) as the frontend template.
 
 ### Safe backend env example
 
-Use [.env.example](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/.env.example) as the backend and shared runtime template.
+Use [../.env.example](../.env.example) as the backend and shared runtime template.
 
 ## Recommended local setup
 
@@ -124,7 +124,7 @@ VITE_SUPABASE_ANON_KEY=your_supabase_publishable_key_here
 
 Before pushing:
 
-1. Confirm [.gitignore](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/.gitignore) includes `.env`, `.env.local`, `.env.*.local`, and frontend env files.
+1. Confirm [../.gitignore](../.gitignore) includes `.env`, `.env.local`, `.env.*.local`, and frontend env files.
 2. Run `git status`.
 3. Make sure no `.env`, `.env.local`, `apps/web/.env.local`, or secret dump files appear.
 4. Search the repo for suspicious strings before pushing.

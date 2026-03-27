@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
@@ -78,6 +78,8 @@ export const AppShell = () => {
   const [notificationsSaving, setNotificationsSaving] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const profileMenuRef = useRef<HTMLDivElement | null>(null);
+  const blockedPathRef = useRef<string | null>(null);
   const viewerRole = resolveViewerRole(
     bootstrap?.viewer.role ?? "caregiver",
     bootstrap?.viewerAccess?.accessRole,
@@ -99,7 +101,15 @@ export const AppShell = () => {
   const canViewInsurance = capabilities.includes("view_insurance");
   const canViewAuditLog = capabilities.includes("view_audit_log");
   const openSettingsSection = (section: "profile" | "preferences" | "privacy" | "access") => {
-    navigate(`/settings?section=${section}`);
+    const nextTab =
+      section === "preferences"
+        ? "notifications"
+        : section === "privacy"
+          ? "security"
+          : section === "access"
+            ? (canManageFamily ? "team" : "security")
+            : "profile";
+    navigate(`/settings?tab=${nextTab}`);
     setProfileOpen(false);
   };
 
@@ -113,9 +123,28 @@ export const AppShell = () => {
   useEffect(() => {
     const isAllowed = allowedPaths.some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`));
     if (!isAllowed && location.pathname !== "/") {
+      if (blockedPathRef.current !== location.pathname) {
+        blockedPathRef.current = location.pathname;
+        toast.error("That section isn't available for this role.");
+      }
       navigate(roleHomePath(viewerRole), { replace: true });
+      return;
     }
+    blockedPathRef.current = null;
   }, [allowedPaths, location.pathname, navigate, viewerRole]);
+
+  useEffect(() => {
+    if (!profileOpen) return undefined;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!profileMenuRef.current?.contains(event.target as Node)) {
+        setProfileOpen(false);
+      }
+    };
+
+    window.addEventListener("mousedown", handlePointerDown);
+    return () => window.removeEventListener("mousedown", handlePointerDown);
+  }, [profileOpen]);
 
   const pageTitle = useMemo(
     () => {
@@ -266,7 +295,7 @@ export const AppShell = () => {
               ) : null}
             </button>
 
-            <div className="relative">
+            <div ref={profileMenuRef} className="relative">
               <button
                 type="button"
                 className="flex min-h-12 items-center gap-2 rounded-2xl border border-borderColor bg-surface px-3 py-2 shadow-sm transition hover:bg-slate-50"
@@ -321,7 +350,10 @@ export const AppShell = () => {
       </div>
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-borderColor bg-surface/95 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur lg:hidden" aria-label="Mobile navigation">
-        <div className="mx-auto grid max-w-xl grid-cols-6 gap-1">
+        <div
+          className="mx-auto grid max-w-xl gap-1"
+          style={{ gridTemplateColumns: `repeat(${mobilePrimaryTabs.length + 1}, minmax(0, 1fr))` }}
+        >
           {mobilePrimaryTabs.map(({ to, shortLabel, icon: Icon }) => (
             <NavLink
               key={to}
@@ -398,7 +430,7 @@ export const AppShell = () => {
               </Link>
             ))}
           <Link
-            to="/settings?section=profile"
+            to="/settings?tab=profile"
             onClick={() => setMoreOpen(false)}
             className="flex min-h-12 items-center gap-3 rounded-2xl border border-borderColor p-4 text-base font-semibold text-textPrimary"
           >

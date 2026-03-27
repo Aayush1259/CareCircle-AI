@@ -277,7 +277,7 @@ export const CareChatAssistant = ({ compact = false }: { compact?: boolean }) =>
                 type="button"
                 onClick={() => setSelectedSessionId(session.id)}
                 className={cn(
-                  "flex shrink-0 items-center rounded-full border px-3 py-1.5 text-xs font-semibold transition whitespace-nowrap max-w-[140px] truncate",
+                  "flex shrink-0 items-center rounded-full border px-3 py-1.5 text-xs font-semibold transition whitespace-nowrap max-w-[200px] truncate",
                   selectedSessionId === session.id
                     ? "border-brand bg-brandSoft text-brandDark"
                     : "border-borderColor bg-white text-textSecondary hover:bg-slate-50",

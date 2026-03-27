@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, CheckCircle2, HeartHandshake, Pill, UserPlus } from "lucide-react";
 import toast from "react-hot-toast";
@@ -18,24 +18,52 @@ const commonConditions = [
 
 export const OnboardingPage = () => {
   const navigate = useNavigate();
-  const { request, refresh } = useAppData();
+  const { bootstrap, request, refresh } = useAppData();
   const [step, setStep] = useState(0);
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [form, setForm] = useState({
-    name: "Sarah Martinez",
-    email: "demo@carecircle.ai",
-    password: "Demo1234",
+    name: "",
+    email: "",
+    password: "",
     role: "caregiver",
-    patientName: 'Eleanor "Ellie" Martinez',
-    dateOfBirth: "1948-04-18",
-    conditions: ["Type 2 Diabetes", "Hypertension", "Early-stage Alzheimer's", "Arthritis"],
-    doctorName: "Dr. Robert Chen",
-    doctorPhone: "(555) 234-5678",
-    medicationName: "Metformin",
-    medicationDose: "500",
-    medicationPurpose: "Helps keep blood sugar steadier throughout the day.",
-    familyEmail: "james@carecircle.ai",
+    patientName: "",
+    dateOfBirth: "",
+    conditions: [] as string[],
+    doctorName: "",
+    doctorPhone: "",
+    medicationName: "",
+    medicationDose: "",
+    medicationPurpose: "",
+    familyEmail: "",
   });
+
+  useEffect(() => {
+    if (!bootstrap) return;
+    setForm((current) => {
+      if (current.name || current.email || current.patientName) {
+        return current;
+      }
+
+      const viewerRole =
+        bootstrap.viewerAccess?.accessRole === "doctor" || bootstrap.viewer.role === "doctor"
+          ? "doctor"
+          : bootstrap.viewerAccess?.accessRole === "family_member" || bootstrap.viewer.role === "family_member"
+            ? "family_member"
+            : "caregiver";
+
+      return {
+        ...current,
+        name: bootstrap.viewer.name,
+        email: bootstrap.viewer.email,
+        role: viewerRole,
+        patientName: bootstrap.patient.name,
+        dateOfBirth: bootstrap.patient.dateOfBirth,
+        conditions: [bootstrap.patient.primaryDiagnosis, ...bootstrap.patient.secondaryConditions].filter(Boolean),
+        doctorName: bootstrap.patient.primaryDoctorName,
+        doctorPhone: bootstrap.patient.primaryDoctorPhone,
+      };
+    });
+  }, [bootstrap]);
 
   const age = useMemo(() => calcAge(form.dateOfBirth), [form.dateOfBirth]);
 

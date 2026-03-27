@@ -60,7 +60,16 @@ const passwordResetTokens = new Map<string, PasswordResetTokenRecord>();
 const normalizeEmail = (value: string) => value.trim().toLowerCase();
 
 const normalizeRole = (value?: string): UserRole => {
-  if (value === "family_member" || value === "doctor" || value === "admin") return value;
+  if (
+    value === "primary_caregiver" ||
+    value === "secondary_caregiver" ||
+    value === "family_member" ||
+    value === "doctor" ||
+    value === "admin" ||
+    value === "caregiver"
+  ) {
+    return value;
+  }
   return "caregiver";
 };
 
@@ -80,14 +89,74 @@ const setLocalPassword = (email: string, password: string) => {
 
 const resolveAccessRole = (role: UserRole): PatientAccessRole => {
   if (role === "doctor") return "doctor";
-  if (role === "admin" || role === "caregiver") return "primary_caregiver";
+  if (role === "secondary_caregiver") return "secondary_caregiver";
+  if (role === "admin" || role === "caregiver" || role === "primary_caregiver") return "primary_caregiver";
   return "family_member";
 };
 
 const resolveAccessLevel = (role: UserRole): PatientAccessRecord["accessLevel"] => {
   if (role === "doctor") return "clinical_access";
-  if (role === "admin" || role === "caregiver") return "full_access";
+  if (role === "secondary_caregiver") return "can_log";
+  if (role === "admin" || role === "caregiver" || role === "primary_caregiver") return "full_access";
   return "can_coordinate";
+};
+
+const tokenExpiryFromJwt = (token: string) => {
+  const decoded = jwt.decode(token);
+  if (decoded && typeof decoded === "object" && typeof decoded.exp === "number") {
+    return new Date(decoded.exp * 1000).toISOString();
+  }
+  return new Date(Date.now() + sessionDurationMs).toISOString();
+};
+
+const buildSupabaseAccessSession = async (
+  token: string,
+  requestedPatientId?: string | null,
+): Promise<AuthSession | null> => {
+  if (!featureFlags.supabaseEnabled) return null;
+
+  const authClient = supabaseAdmin ?? supabasePublic;
+  if (!authClient) return null;
+
+  try {
+    const { data, error } = await authClient.auth.getUser(token);
+    if (error || !data.user?.id) {
+      return null;
+    }
+
+    const normalizedEmail = normalizeEmail(data.user.email ?? "");
+    if (!normalizedEmail) {
+      return null;
+    }
+
+    const viewer = await persistenceService.loadUserByAuthIdentity(data.user.id, normalizedEmail);
+    if (!viewer) {
+      return null;
+    }
+
+    const snapshot = await persistenceService.loadRequestSnapshot(viewer.id, requestedPatientId);
+    const patient = snapshot.patients[0];
+    const access =
+      snapshot.patientAccess.find(
+        (record) => record.userId === viewer.id && record.patientId === snapshot.activePatientId,
+      ) ?? null;
+
+    if (!patient) {
+      return null;
+    }
+
+    return {
+      token,
+      viewer,
+      patient,
+      access,
+      capabilities: access?.capabilities ?? [],
+      mode: "supabase",
+      expiresAt: tokenExpiryFromJwt(token),
+    };
+  } catch {
+    return null;
+  }
 };
 
 const buildDefaultSettings = (viewer: UserRecord): AppSettingsRecord => ({
@@ -503,5 +572,18 @@ export const authService = {
     } catch {
       return null;
     }
+  },
+
+  async resolveSessionFromToken(token?: string | null, requestedPatientId?: string | null) {
+    const localSession = this.getSessionFromToken(token);
+    if (localSession) {
+      return localSession;
+    }
+
+    if (!token) {
+      return null;
+    }
+
+    return buildSupabaseAccessSession(token, requestedPatientId);
   },
 };

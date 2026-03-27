@@ -43,6 +43,28 @@ const sameDay = (a: string, b: string) => a.slice(0, 10) === b.slice(0, 10);
 
 const todayIso = () => new Date().toISOString();
 
+const redactFamilyMedication = (record: AppSnapshot["medications"][number]) => ({
+  ...record,
+  brandName: undefined,
+  genericName: undefined,
+  purpose: "",
+  instructions: "",
+  pharmacyName: "",
+  pharmacyPhone: "",
+});
+
+const redactFamilyVital = (record: AppSnapshot["healthVitals"][number]) => ({
+  ...record,
+  bloodPressureSystolic: undefined,
+  bloodPressureDiastolic: undefined,
+  heartRate: undefined,
+  bloodGlucose: undefined,
+  weight: undefined,
+  temperature: undefined,
+  oxygenSaturation: undefined,
+  painLevel: undefined,
+});
+
 const buildBootstrapFamilyMembers = () => {
   const currentState = resolveState();
   const patient = getPatient();
@@ -143,18 +165,52 @@ export const getPatient = () => {
 export const getDashboardSummary = (): DashboardSummary => {
   const viewer = getViewer();
   const patient = getPatient();
+  const access = getViewerAccess();
   const currentState = resolveState();
   const today = todayIso().slice(0, 10);
-  const todaysLogs = currentState.medicationLogs.filter((log) => sameDay(log.scheduledTime, today));
+  const isFamilyMember = access?.accessRole === "family_member";
+  const canViewMedications = Boolean(access?.permissions.canViewMedications);
+  const canViewJournal = Boolean(access?.permissions.canViewJournal);
+  const canViewAppointments = Boolean(access?.permissions.canViewAppointments);
+  const canViewTasks = Boolean(access?.permissions.canViewTasks) && access?.accessRole !== "doctor";
+
+  const todaysLogs = canViewMedications
+    ? currentState.medicationLogs.filter(
+        (log) => log.patientId === patient.id && sameDay(log.scheduledTime, today),
+      )
+    : [];
   const taken = todaysLogs.filter((log) => log.status === "taken").length;
   const total = todaysLogs.length;
-  const nextAppointment = currentState.appointments
-    .filter((appointment) => appointment.status === "upcoming")
-    .sort((a, b) =>
-      `${a.appointmentDate}T${a.appointmentTime}`.localeCompare(`${b.appointmentDate}T${b.appointmentTime}`),
-    )[0];
-  const lastJournalEntry = [...currentState.careJournal].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
-  const tasksDueToday = currentState.tasks.filter((task) => task.dueDate === today && task.status !== "done").length;
+  const nextAppointment = canViewAppointments
+    ? currentState.appointments
+        .filter(
+          (appointment) =>
+            appointment.patientId === patient.id &&
+            appointment.status === "upcoming" &&
+            (access?.accessRole !== "doctor" || appointment.doctorName === viewer.name),
+        )
+        .sort((a, b) =>
+          `${a.appointmentDate}T${a.appointmentTime}`.localeCompare(`${b.appointmentDate}T${b.appointmentTime}`),
+        )[0]
+    : undefined;
+  const lastJournalEntry = canViewJournal
+    ? [...currentState.careJournal]
+        .filter(
+          (entry) =>
+            entry.patientId === patient.id &&
+            (!isFamilyMember || entry.userId === viewer.id || entry.userId === patient.userId),
+        )
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
+    : undefined;
+  const tasksDueToday = canViewTasks
+    ? currentState.tasks.filter(
+        (task) =>
+          task.patientId === patient.id &&
+          task.dueDate === today &&
+          task.status !== "done" &&
+          (!isFamilyMember || task.assignedTo === viewer.id),
+      ).length
+    : 0;
 
   return {
     greetingName: viewer.name.split(" ")[0],
@@ -179,41 +235,126 @@ export const getDashboardSummary = (): DashboardSummary => {
   };
 };
 
-export const getBootstrapPayload = (): BootstrapPayload => ({
-  viewer: getViewer(),
-  patient: getPatient(),
-  viewerAccess: getViewerAccess(),
-  patientAccess: resolveState().patientAccess,
-  capabilities: getViewerCapabilities(),
-  permissions: getViewerAccess()?.permissions ?? null,
-  dashboard: getDashboardSummary(),
-  appConfig: {
-    googleAuthEnabled: false,
-  },
-  data: {
-    users: resolveState().users,
-    patients: resolveState().patients,
-    patientAccess: resolveState().patientAccess,
-    medications: resolveState().medications,
-    medicationLogs: resolveState().medicationLogs,
-    careJournal: resolveState().careJournal,
-    documents: resolveState().documents,
-    appointments: resolveState().appointments,
-    familyMembers: buildBootstrapFamilyMembers(),
-    familyMessages: getFamilyMessages(),
-    tasks: resolveState().tasks,
-    emergencyProtocols: resolveState().emergencyProtocols,
-    healthVitals: resolveState().healthVitals,
-    aiInsights: resolveState().aiInsights,
-    notifications: resolveState().notifications,
-    chatSessions: resolveState().chatSessions,
-    chatMessages: resolveState().chatMessages,
-    activityEvents: resolveState().activityEvents,
-    activityReactions: resolveState().activityReactions,
-    settings: resolveState().settings,
-    securityAuditLogs: resolveState().securityAuditLogs,
-  },
-});
+export const getBootstrapPayload = (): BootstrapPayload => {
+  const currentState = resolveState();
+  const viewer = getViewer();
+  const patient = getPatient();
+  const viewerAccess = getViewerAccess();
+  const capabilities = getViewerCapabilities();
+  const permissions = viewerAccess?.permissions ?? null;
+  const isFamilyMember = viewerAccess?.accessRole === "family_member";
+  const rosterUserIds = new Set(
+    [
+      viewer.id,
+      patient.userId,
+      ...currentState.patientAccess
+        .filter((record) => record.patientId === patient.id)
+        .map((record) => record.userId)
+        .filter((userId): userId is string => Boolean(userId)),
+    ],
+  );
+  const patientAccess = currentState.patientAccess.filter((record) => record.patientId === patient.id);
+  const medications = permissions?.canViewMedications
+    ? currentState.medications
+        .filter((item) => item.patientId === patient.id)
+        .map((item) => (isFamilyMember ? redactFamilyMedication(item) : item))
+    : [];
+  const medicationLogs = permissions?.canViewMedications
+    ? currentState.medicationLogs.filter((item) => item.patientId === patient.id)
+    : [];
+  const careJournal = permissions?.canViewJournal
+    ? currentState.careJournal
+        .filter(
+          (entry) =>
+            entry.patientId === patient.id &&
+            (!isFamilyMember || entry.userId === viewer.id || entry.userId === patient.userId),
+        )
+    : [];
+  const documents = permissions?.canViewDocuments
+    ? currentState.documents.filter((item) => item.patientId === patient.id)
+    : [];
+  const appointments = permissions?.canViewAppointments
+    ? currentState.appointments.filter(
+        (item) =>
+          item.patientId === patient.id &&
+          (viewerAccess?.accessRole !== "doctor" || item.doctorName === viewer.name),
+      )
+    : [];
+  const tasks =
+    viewerAccess?.accessRole === "doctor" || !permissions?.canViewTasks
+      ? []
+      : currentState.tasks.filter(
+          (item) => item.patientId === patient.id && (!isFamilyMember || item.assignedTo === viewer.id),
+        );
+  const healthVitals = permissions?.canViewVitals
+    ? currentState.healthVitals
+        .filter((item) => item.patientId === patient.id)
+        .map((item) => (permissions.canViewVitalsRaw || !isFamilyMember ? item : redactFamilyVital(item)))
+    : [];
+  const activityEvents =
+    permissions?.canViewFamily && viewerAccess?.accessRole !== "doctor"
+      ? currentState.activityEvents.filter((item) => item.patientId === patient.id)
+      : [];
+  const visibleEventIds = new Set(activityEvents.map((item) => item.id));
+  const activityReactions =
+    permissions?.canViewFamily && viewerAccess?.accessRole !== "doctor"
+      ? currentState.activityReactions.filter((item) => visibleEventIds.has(item.eventId))
+      : [];
+  const chatSessions = currentState.chatSessions.filter(
+    (item) => item.patientId === patient.id && item.userId === viewer.id,
+  );
+  const visibleChatSessionIds = new Set(chatSessions.map((item) => item.id));
+  const chatMessages =
+    capabilities.includes("view_dashboard")
+      ? currentState.chatMessages.filter((item) => visibleChatSessionIds.has(item.sessionId))
+      : [];
+
+  return {
+    viewer,
+    patient: permissions?.canViewInsurance ? patient : { ...patient, insuranceProvider: "", insuranceId: "" },
+    viewerAccess,
+    patientAccess,
+    capabilities,
+    permissions,
+    dashboard: getDashboardSummary(),
+    appConfig: {
+      googleAuthEnabled: false,
+    },
+    data: {
+      users: currentState.users.filter((user) => rosterUserIds.has(user.id)),
+      patients: [permissions?.canViewInsurance ? patient : { ...patient, insuranceProvider: "", insuranceId: "" }],
+      patientAccess,
+      medications,
+      medicationLogs,
+      careJournal,
+      documents,
+      appointments,
+      familyMembers:
+        permissions?.canViewFamily && viewerAccess?.accessRole !== "doctor" ? buildBootstrapFamilyMembers() : [],
+      familyMessages:
+        permissions?.canViewFamily && viewerAccess?.accessRole !== "doctor"
+          ? getFamilyMessages().filter((item) => item.patientId === patient.id)
+          : [],
+      tasks,
+      emergencyProtocols: permissions?.canViewEmergency
+        ? currentState.emergencyProtocols.filter((item) => item.patientId === patient.id)
+        : [],
+      healthVitals,
+      aiInsights: permissions?.canViewAiInsights
+        ? currentState.aiInsights.filter((item) => item.patientId === patient.id)
+        : [],
+      notifications: currentState.notifications.filter((item) => item.userId === viewer.id && item.patientId === patient.id),
+      chatSessions,
+      chatMessages,
+      activityEvents,
+      activityReactions,
+      settings: currentState.settings.filter((item) => item.userId === viewer.id),
+      securityAuditLogs: permissions?.canViewAuditLog
+        ? currentState.securityAuditLogs.filter((item) => item.patientId === patient.id).slice(0, 25)
+        : currentState.securityAuditLogs.filter((item) => item.userId === viewer.id).slice(0, 25),
+    },
+  };
+};
 
 export const nextId = (prefix: string) => {
   return `${prefix}_${Math.random().toString(36).substring(2, 11)}`;

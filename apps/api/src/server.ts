@@ -760,15 +760,18 @@ export const createServer = () => {
     }),
   );
 
-  app.get("/api/auth/session", (request, response) => {
-    const session = authService.getSessionFromToken(getBearerToken(request));
+  app.get("/api/auth/session", asyncHandler(async (request, response) => {
+    const session = await authService.resolveSessionFromToken(
+      getBearerToken(request),
+      getRequestedPatientId(request),
+    );
     if (!session) {
       response.status(401).json({ message: "Please sign in to continue." });
       return;
     }
 
     response.json({ session });
-  });
+  }));
 
   app.post("/api/auth/logout", (_request, response) => {
     recordAudit({
@@ -785,41 +788,25 @@ export const createServer = () => {
       return;
     }
 
-    let session = authService.getSessionFromToken(getBearerToken(request));
-    
-    // Bridge for Supabase: If the frontend sends a Supabase token, it won't match our 
-    // mock authService. We allow it to pass through and use the default mock viewer
-    // so the rest of the app (Dashboard, Medications, etc.) can still fetch the demo data.
-    const token = getBearerToken(request);
-    if (!session && token && token.length > 50) {
-       session = {
-         token,
-         viewer: getViewer(),
-         patient: getPatient(),
-         access: getViewerAccess(),
-         capabilities: ["view_dashboard", "view_medications", "manage_medications", "log_medications", "view_journal", "log_journal", "view_documents", "upload_documents", "view_appointments", "manage_appointments", "view_vitals", "log_vitals", "view_family", "manage_family", "view_tasks", "manage_tasks", "complete_tasks", "view_emergency", "share_emergency", "edit_patient", "export_data", "view_audit_log"],
-         mode: "demo",
-         expiresAt: new Date(Date.now() + 86400000).toISOString()
-       } as any;
-    }
-
+    const requestedPatientId = getRequestedPatientId(request);
+    const session = await authService.resolveSessionFromToken(getBearerToken(request), requestedPatientId);
     if (!session) {
       response.status(401).json({ message: "Please sign in to continue." });
       return;
     }
 
     response.locals.session = session;
-    const requestedPatientId = getRequestedPatientId(request) || session.patient.id;
+    const activePatientId = requestedPatientId || session.patient.id;
     const scopedSnapshot =
       session.mode === "supabase"
-        ? await persistenceService.loadRequestSnapshot(session.viewer.id, requestedPatientId)
+        ? await persistenceService.loadRequestSnapshot(session.viewer.id, activePatientId)
         : undefined;
 
     runWithRequestScope(
       {
         snapshot: scopedSnapshot,
         viewerId: session.viewer.id,
-        patientId: requestedPatientId,
+        patientId: activePatientId,
       },
       next,
     );
@@ -1167,6 +1154,7 @@ export const createServer = () => {
 
   app.post("/api/journal/:id/analyze", asyncHandler(async (request, response) => {
     if (!requireCapability(response, "view_ai_insights", "AI journal analysis is only available to caregivers and clinicians.")) return;
+    if (!requireCapability(response, "log_journal", "You do not have permission to save AI analysis on this care note.")) return;
     const entry = state.careJournal.find((item) => item.id === request.params.id);
     if (!entry) {
       response.status(404).json({ message: "Journal entry not found." });
@@ -1237,7 +1225,9 @@ export const createServer = () => {
   app.get("/api/documents/:id/access", asyncHandler(async (request, response) => {
     if (!requireCapability(response, "view_documents", "You do not have access to patient documents.")) return;
     await persistenceService.hydrateDocumentsForPatient(getPatient().id);
-    const document = state.documents.find((item) => item.id === request.params.id);
+    const document = state.documents.find(
+      (item) => item.id === request.params.id && item.patientId === getPatient().id,
+    );
     if (!document) {
       response.status(404).json({ message: "Document not found." });
       return;
