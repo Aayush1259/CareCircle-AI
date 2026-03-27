@@ -6,6 +6,7 @@ import type {
   NotificationPreferences,
   PatientAccessRecord,
   PatientAccessRole,
+  PatientRecord,
   UserRecord,
   UserRole,
 } from "@carecircle/shared";
@@ -175,6 +176,92 @@ const buildDefaultSettings = (viewer: UserRecord): AppSettingsRecord => ({
   ],
 });
 
+const buildStarterPatient = (viewer: UserRecord): PatientRecord => {
+  const now = new Date().toISOString();
+  const patientLabel = viewer.role === "doctor" ? "New patient" : "Your loved one";
+  const diagnosisLabel = viewer.role === "doctor" ? "Clinical profile setup in progress" : "Care setup in progress";
+
+  return {
+    id: nextId("patient"),
+    userId: viewer.id,
+    name: patientLabel,
+    preferredName: viewer.role === "doctor" ? "Patient" : "Loved one",
+    dateOfBirth: "1950-01-01",
+    primaryDiagnosis: diagnosisLabel,
+    secondaryConditions: [],
+    primaryDoctorName: viewer.role === "doctor" ? viewer.name : "",
+    primaryDoctorPhone: "",
+    hospitalPreference: "",
+    insuranceProvider: "",
+    insuranceId: "",
+    bloodType: "",
+    allergies: [],
+    mobilityLevel: "",
+    createdAt: now,
+    updatedAt: now,
+  };
+};
+
+const provisionStarterWorkspace = async (viewer: UserRecord) => {
+  const currentState = getState();
+  const defaultAccessRole = resolveAccessRole(viewer.role);
+  const defaultAccessLevel = resolveAccessLevel(viewer.role);
+
+  let patient = currentState.patients.find((item) => item.userId === viewer.id);
+  if (!patient) {
+    patient = buildStarterPatient(viewer);
+    currentState.patients.unshift(patient);
+    await persistenceService.persistPatient(patient);
+  }
+
+  let access = currentState.patientAccess.find(
+    (record) => record.patientId === patient.id && record.userId === viewer.id,
+  );
+  if (!access) {
+    access = buildPatientAccessRecord({
+      id: nextId("access"),
+      patientId: patient.id,
+      userId: viewer.id,
+      email: viewer.email,
+      name: viewer.name,
+      accessRole: defaultAccessRole,
+      accessLevel: defaultAccessLevel,
+      invitedBy: viewer.id,
+      joinStatus: "active",
+      inviteToken: nextId("invite"),
+      createdAt: new Date().toISOString(),
+      acceptedAt: new Date().toISOString(),
+      lastActive: new Date().toISOString(),
+    });
+    currentState.patientAccess.unshift(access);
+    await persistenceService.persistPatientAccess(access);
+  }
+
+  if (!currentState.settings.some((item) => item.userId === viewer.id)) {
+    const settings = buildDefaultSettings(viewer);
+    currentState.settings.unshift(settings);
+    await persistenceService.persistSettings(settings);
+  }
+
+  currentState.activeUserId = viewer.id;
+  currentState.activePatientId = patient.id;
+
+  return { patient, access };
+};
+
+const loadSnapshotForViewer = async (viewer: UserRecord) => {
+  try {
+    return await persistenceService.loadRequestSnapshot(viewer.id);
+  } catch (error) {
+    if (!(error instanceof Error) || !/does not have access to any patients yet/i.test(error.message)) {
+      throw error;
+    }
+
+    const starterWorkspace = await provisionStarterWorkspace(viewer);
+    return persistenceService.loadRequestSnapshot(viewer.id, starterWorkspace.patient.id);
+  }
+};
+
 const syncViewerWorkspace = (viewer: UserRecord) => {
   const state = getState();
   const patient = getPatient();
@@ -231,20 +318,42 @@ const syncViewerWorkspace = (viewer: UserRecord) => {
 };
 
 const buildSession = async (viewer: UserRecord, mode: "demo" | "supabase"): Promise<AuthSession> => {
-  let access = syncViewerWorkspace(viewer);
-  let patient = getPatient();
-
   if (mode === "supabase") {
-    const snapshot = await persistenceService.loadRequestSnapshot(viewer.id);
+    const snapshot = await loadSnapshotForViewer(viewer);
     const nextAccess =
       snapshot.patientAccess.find((record) => record.userId === viewer.id && record.patientId === snapshot.activePatientId) ??
       null;
-    access = nextAccess ?? access;
-    patient = snapshot.patients[0] ?? patient;
-  } else {
-    setActiveUser(viewer.id);
+
+    const patient =
+      snapshot.patients.find((record) => record.id === snapshot.activePatientId) ??
+      snapshot.patients[0];
+
+    if (!nextAccess || !patient) {
+      throw new Error("CareCircle could not finish preparing this account's workspace.");
+    }
+
+    const currentState = getState();
+    currentState.activeUserId = viewer.id;
+    currentState.activePatientId = patient.id;
+
+    const expiresAt = new Date(Date.now() + sessionDurationMs).toISOString();
+    const session: Omit<AuthSession, "token"> = {
+      viewer,
+      patient,
+      access: nextAccess,
+      capabilities: nextAccess.capabilities,
+      mode,
+      expiresAt,
+    };
+    const token = jwt.sign({ viewerId: viewer.id, ...session }, env.jwtSecret, {
+      expiresIn: "7d",
+    });
+    return { token, ...session };
   }
 
+  const access = syncViewerWorkspace(viewer);
+  const patient = getPatient();
+  setActiveUser(viewer.id);
   const expiresAt = new Date(Date.now() + sessionDurationMs).toISOString();
   const session: Omit<AuthSession, "token"> = {
     viewer,

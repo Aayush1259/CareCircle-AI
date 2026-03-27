@@ -2499,9 +2499,21 @@ export const createServer = () => {
 
   app.use((error: Error, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
     console.error(error);
+
+    const isJsonSyntaxError =
+      error instanceof SyntaxError &&
+      "body" in error;
+
+    if (isJsonSyntaxError) {
+      response.status(400).json({
+        message: "Request body is not valid JSON.",
+      });
+      return;
+    }
+
     response.status(500).json({
       message: "Something went wrong. Please try again in a moment.",
-      detail: error.message,
+      ...(process.env.NODE_ENV === "production" ? {} : { detail: error.message }),
     });
   });
 
