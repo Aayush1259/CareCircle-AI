@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Download, FileSearch, Trash2, UploadCloud } from "lucide-react";
 import toast from "react-hot-toast";
 import type { DocumentRecord } from "@carecircle/shared";
@@ -22,6 +22,8 @@ const maxFileSize = 20 * 1024 * 1024;
 export const DocumentsPage = () => {
   const { bootstrap, request, refresh } = useAppData();
   const [selectedDocument, setSelectedDocument] = useState<DocumentRecord | null>(null);
+  const [selectedDocumentUrl, setSelectedDocumentUrl] = useState("");
+  const [selectedDocumentUrlLoading, setSelectedDocumentUrlLoading] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -35,6 +37,47 @@ export const DocumentsPage = () => {
   const [notes, setNotes] = useState("");
 
   if (!bootstrap) return null;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSecureUrl = async () => {
+      if (!selectedDocument) {
+        setSelectedDocumentUrl("");
+        setSelectedDocumentUrlLoading(false);
+        return;
+      }
+
+      if (!selectedDocument.storagePath) {
+        setSelectedDocumentUrl(selectedDocument.fileUrl);
+        setSelectedDocumentUrlLoading(false);
+        return;
+      }
+
+      setSelectedDocumentUrlLoading(true);
+      try {
+        const response = await request<{ url: string }>(`/documents/${selectedDocument.id}/access`);
+        if (!cancelled) {
+          setSelectedDocumentUrl(response.url);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setSelectedDocumentUrl("");
+          toast.error(error instanceof Error ? error.message : "Unable to open that document right now.");
+        }
+      } finally {
+        if (!cancelled) {
+          setSelectedDocumentUrlLoading(false);
+        }
+      }
+    };
+
+    void loadSecureUrl();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [request, selectedDocument]);
 
   const validateFile = (file?: File | null) => {
     if (!file) return null;
@@ -153,6 +196,19 @@ export const DocumentsPage = () => {
       await refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Please try again.");
+    }
+  };
+
+  const openSelectedDocument = async (download = false) => {
+    if (!selectedDocument) return;
+
+    try {
+      const response = await request<{ url: string }>(
+        `/documents/${selectedDocument.id}/access${download ? "?download=1" : ""}`,
+      );
+      window.open(response.url, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to open that document right now.");
     }
   };
 
@@ -293,20 +349,20 @@ export const DocumentsPage = () => {
               <div className="mb-4 flex items-center justify-between gap-3">
                 <p className="text-sm font-semibold uppercase tracking-[0.18em] text-textSecondary">Preview</p>
                 <div className="flex gap-2">
-                  <a href={selectedDocument.fileUrl} target="_blank" rel="noreferrer">
-                    <Button variant="ghost">Open</Button>
-                  </a>
-                  <a href={selectedDocument.fileUrl} download>
-                    <Button variant="secondary">
-                      <Download className="h-4 w-4" />
-                      Download
-                    </Button>
-                  </a>
+                  <Button variant="ghost" onClick={() => void openSelectedDocument()}>
+                    Open
+                  </Button>
+                  <Button variant="secondary" onClick={() => void openSelectedDocument(true)}>
+                    <Download className="h-4 w-4" />
+                    Download
+                  </Button>
                 </div>
               </div>
               <div className="flex min-h-[420px] items-center justify-center rounded-[24px] border border-dashed border-borderColor bg-white p-6 text-center text-textSecondary">
-                {selectedDocument.fileType === "image" ? (
-                  <img src={selectedDocument.fileUrl} alt={`Preview of ${selectedDocument.fileName}`} className="max-h-[380px] w-auto rounded-3xl object-contain" />
+                {selectedDocumentUrlLoading ? (
+                  "Loading secure preview..."
+                ) : selectedDocument.fileType === "image" && selectedDocumentUrl ? (
+                  <img src={selectedDocumentUrl} alt={`Preview of ${selectedDocument.fileName}`} className="max-h-[380px] w-auto rounded-3xl object-contain" />
                 ) : (
                   "PDF preview placeholder"
                 )}
@@ -369,12 +425,10 @@ export const DocumentsPage = () => {
                 </Field>
               </div>
               <div className="flex flex-wrap gap-2">
-                <a href={selectedDocument.fileUrl} download>
-                  <Button variant="ghost">
-                    <Download className="h-4 w-4" />
-                    Download
-                  </Button>
-                </a>
+                <Button variant="ghost" onClick={() => void openSelectedDocument(true)}>
+                  <Download className="h-4 w-4" />
+                  Download
+                </Button>
                 <Button variant="ghost" onClick={() => void deleteDocument()}>
                   <Trash2 className="h-4 w-4" />
                   Delete

@@ -7,6 +7,7 @@ CareCircle AI is a calm, compassionate full-stack web application for family car
 - Full project documentation: [docs/PROJECT_DOCUMENTATION.md](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/docs/PROJECT_DOCUMENTATION.md)
 - Prompt history and issue log: [docs/PROMPT_HISTORY_AND_ISSUE_LOG.md](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/docs/PROMPT_HISTORY_AND_ISSUE_LOG.md)
 - Deployment guide: [docs/DEPLOYMENT_GUIDE.md](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/docs/DEPLOYMENT_GUIDE.md)
+- Supabase setup guide: [docs/SUPABASE_SETUP_GUIDE.md](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/docs/SUPABASE_SETUP_GUIDE.md)
 - Secrets and GitHub setup: [docs/SECRETS_AND_GITHUB_SETUP.md](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/docs/SECRETS_AND_GITHUB_SETUP.md)
 - Final build prompt for this repo: [docs/FINAL_PRODUCTION_BUILD_PROMPT.md](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/docs/FINAL_PRODUCTION_BUILD_PROMPT.md)
 
@@ -64,9 +65,9 @@ Add final screenshots here before submission:
 ## Tech stack
 
 - Frontend: React 18, Vite, Tailwind CSS, Framer Motion, React Router v6, Lucide React, React Hot Toast, Chart.js, jsPDF, qrcode.react
-- Backend: Node.js, Express, Supabase-ready storage/auth hooks, OpenAI-ready AI service layer, Multer, pdf-parse, Tesseract.js, node-cron, Nodemailer
+- Backend: Node.js, Express, Supabase-backed auth/storage hooks, OpenAI-ready AI service layer, Multer, pdf-parse, Tesseract.js, node-cron, Nodemailer
 - Database: Supabase PostgreSQL schema and seed SQL included under `supabase/`
-- Deployment targets: Vercel for web, Railway for API, Supabase for database/storage
+- Deployment targets: Netlify for web, Render for API, Supabase for database/storage
 
 ## Demo account
 
@@ -85,7 +86,7 @@ Add final screenshots here before submission:
 2. Run `npm install`.
 3. Run `npm run dev`.
 4. Open `http://localhost:5173/login` and sign in with `demo@carecircle.ai / Demo1234`.
-5. Optional: apply `supabase/migrations/0001_init.sql`, `supabase/seed.sql`, and `supabase/storage.sql` in your Supabase project.
+5. Optional but recommended: follow [docs/SUPABASE_SETUP_GUIDE.md](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/docs/SUPABASE_SETUP_GUIDE.md) and apply the production migration set in Supabase.
 
 If OpenAI, SMTP, or Supabase keys are missing, the app still runs in demo-safe fallback mode with seeded data and the same demo login.
 
@@ -111,6 +112,7 @@ supabase/
 - Backend must still be deployed separately because the current architecture uses an Express API
 - No custom domain is required; free platform URLs are enough for demos and public review
 - Full instructions: [docs/DEPLOYMENT_GUIDE.md](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/docs/DEPLOYMENT_GUIDE.md)
+- Supabase click-by-click setup: [docs/SUPABASE_SETUP_GUIDE.md](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/docs/SUPABASE_SETUP_GUIDE.md)
 
 ### Frontend env vars
 

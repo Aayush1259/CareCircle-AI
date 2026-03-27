@@ -109,6 +109,7 @@ const recordAudit = (input: {
     | "emergency_share_link"
     | "emergency_share_email"
     | "document_uploaded"
+    | "document_accessed"
     | "document_reprocessed"
     | "document_deleted"
     | "access_denied";
@@ -177,17 +178,53 @@ const requireCapability = (
   return true;
 };
 
-const createDocumentUrl = async (file?: Express.Multer.File) => {
+const sanitizeFileName = (value: string) => value.replace(/[^a-zA-Z0-9._-]+/g, "-");
+
+const createPublicUploadUrl = async (file?: Express.Multer.File) => {
   if (!file) return "/demo/uploaded-document";
   if (!supabaseAdmin) return `/uploads/${Date.now()}-${file.originalname}`;
 
-  const filePath = `documents/${getViewer().id}/${Date.now()}-${file.originalname}`;
+  const filePath = `uploads/${getViewer().id}/${Date.now()}-${sanitizeFileName(file.originalname)}`;
   await supabaseAdmin.storage.from(env.storageBucket).upload(filePath, file.buffer, {
     upsert: true,
     contentType: file.mimetype,
   });
   const { data } = supabaseAdmin.storage.from(env.storageBucket).getPublicUrl(filePath);
   return data.publicUrl;
+};
+
+const createSecureDocumentReference = async (
+  file?: Express.Multer.File,
+): Promise<{ fileUrl: string; storagePath?: string }> => {
+  if (!file) {
+    return { fileUrl: "/demo/uploaded-document" };
+  }
+
+  if (!supabaseAdmin) {
+    return { fileUrl: `/uploads/${Date.now()}-${sanitizeFileName(file.originalname)}` };
+  }
+
+  const filePath = `documents/${getPatient().id}/${getViewer().id}/${Date.now()}-${sanitizeFileName(file.originalname)}`;
+  await supabaseAdmin.storage.from(env.storageBucket).upload(filePath, file.buffer, {
+    upsert: true,
+    contentType: file.mimetype,
+  });
+
+  return { fileUrl: "", storagePath: filePath };
+};
+
+const createSignedDocumentUrl = async (storagePath: string, downloadName?: string) => {
+  if (!supabaseAdmin) return null;
+
+  const { data, error } = await supabaseAdmin.storage.from(env.storageBucket).createSignedUrl(storagePath, 60 * 60, {
+    download: downloadName || undefined,
+  });
+
+  if (error) {
+    throw new Error(`Unable to create a signed document URL for ${storagePath}: ${error.message}`);
+  }
+
+  return data.signedUrl;
 };
 
 const getBearerToken = (request: express.Request) => {
@@ -250,14 +287,23 @@ export const createServer = () => {
   app.use(express.json({ limit: "10mb" }));
   app.use(express.urlencoded({ extended: true }));
 
-  app.get("/api/health", (_request, response) => {
-    response.json({
-      ok: true,
+  app.get("/api/health", asyncHandler(async (_request, response) => {
+    let db: "demo" | "connected" | "error" = featureFlags.supabaseEnabled ? "connected" : "demo";
+
+    if (supabaseAdmin) {
+      const { error } = await supabaseAdmin.from("users").select("id", { head: true, count: "exact" }).limit(1);
+      if (error) db = "error";
+    }
+
+    response.status(db === "error" ? 503 : 200).json({
+      ok: db !== "error",
+      status: db === "error" ? "degraded" : "ok",
       service: "carecircle-api",
       timestamp: new Date().toISOString(),
+      db,
       features: featureFlags,
     });
-  });
+  }));
 
   app.post(
     "/api/auth/signup",
@@ -396,7 +442,7 @@ export const createServer = () => {
         return;
       }
 
-      const fileUrl = await createDocumentUrl(request.file);
+      const fileUrl = await createPublicUploadUrl(request.file);
       response.status(201).json({ fileUrl });
     }),
   );
@@ -720,7 +766,7 @@ export const createServer = () => {
       if (!requireCapability(response, "upload_documents", "You do not have permission to upload documents.")) return;
       const extractedText = await documentService.extractText(request.file);
       const analysis = await aiService.decodeDocument(extractedText);
-      const fileUrl = await createDocumentUrl(request.file);
+      const { fileUrl, storagePath } = await createSecureDocumentReference(request.file);
       const body = request.body as { category?: DocumentRecord["documentCategory"]; documentDate?: string };
       const document: DocumentRecord = {
         id: nextId("document"),
@@ -728,6 +774,7 @@ export const createServer = () => {
         userId: getViewer().id,
         fileName: request.file?.originalname ?? "uploaded-document",
         fileUrl,
+        storagePath,
         fileType: request.file?.mimetype.includes("pdf") ? "PDF" : "image",
         documentCategory: body.category ?? "other",
         uploadDate: new Date().toISOString().slice(0, 10),
@@ -770,6 +817,39 @@ export const createServer = () => {
       response.status(201).json({ document });
     }),
   );
+
+  app.get("/api/documents/:id/access", asyncHandler(async (request, response) => {
+    if (!requireCapability(response, "view_documents", "You do not have access to patient documents.")) return;
+    const document = state.documents.find((item) => item.id === request.params.id);
+    if (!document) {
+      response.status(404).json({ message: "Document not found." });
+      return;
+    }
+
+    const download = request.query.download === "1";
+    const url =
+      document.storagePath && supabaseAdmin
+        ? await createSignedDocumentUrl(document.storagePath, download ? document.fileName : undefined)
+        : document.fileUrl;
+
+    if (!url) {
+      response.status(503).json({ message: "Document access is not available right now." });
+      return;
+    }
+
+    recordAudit({
+      action: "document_accessed",
+      resourceType: "document",
+      resourceId: document.id,
+      detail: `${download ? "Downloaded" : "Opened"} ${document.fileName}`,
+      metadata: { viaSignedUrl: Boolean(document.storagePath) },
+    });
+
+    response.json({
+      url,
+      expiresInSeconds: document.storagePath ? 60 * 60 : null,
+    });
+  }));
 
   app.patch("/api/documents/:id", (request, response) => {
     if (!requireCapability(response, "upload_documents", "You do not have permission to update documents.")) return;

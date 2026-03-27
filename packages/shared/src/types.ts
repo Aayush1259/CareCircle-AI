@@ -113,6 +113,7 @@ export type AuditActionType =
   | "emergency_share_link"
   | "emergency_share_email"
   | "document_uploaded"
+  | "document_accessed"
   | "document_reprocessed"
   | "document_deleted"
   | "access_denied";
@@ -258,6 +259,7 @@ export interface DocumentRecord {
   userId: string;
   fileName: string;
   fileUrl: string;
+  storagePath?: string;
   fileType: "PDF" | "image";
   documentCategory: DocumentCategory;
   uploadDate: string;

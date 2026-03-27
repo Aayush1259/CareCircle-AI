@@ -81,9 +81,14 @@ Use [.env.example](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/.env.exampl
 In your Supabase project:
 
 1. Create a new project
-2. Run [0001_init.sql](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/supabase/migrations/0001_init.sql)
-3. Run [storage.sql](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/supabase/storage.sql)
-4. Run [seed.sql](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/supabase/seed.sql) if you want the demo data
+2. Follow the full click-by-click setup in [docs/SUPABASE_SETUP_GUIDE.md](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/docs/SUPABASE_SETUP_GUIDE.md)
+3. Run the migration set in order:
+   - [0001_init.sql](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/supabase/migrations/0001_init.sql)
+   - [0002_identity_access.sql](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/supabase/migrations/0002_identity_access.sql)
+   - [0003_clinical_audit.sql](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/supabase/migrations/0003_clinical_audit.sql)
+   - [0004_rls_identity_access.sql](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/supabase/migrations/0004_rls_identity_access.sql)
+   - [storage.sql](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/supabase/storage.sql)
+   - [seed.sql](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/supabase/seed.sql) if you want demo data
 
 ## Deploy the backend first
 
@@ -200,6 +205,7 @@ After deployment, test these flows:
 8. Open Family Hub and send a message
 9. Open Emergency and download the patient card PDF
 10. Open Settings and test a preference save
+11. Open Documents, upload a file, and confirm it opens through the backend instead of a public storage link
 
 ## If you want frontend-only deployment
 

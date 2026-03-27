@@ -142,8 +142,15 @@ Keep the backend in `apps/api` using the current Express server.
 Use the current repo layout for Supabase setup:
 
 - `supabase/migrations/0001_init.sql`
+- `supabase/migrations/0002_identity_access.sql`
+- `supabase/migrations/0003_clinical_audit.sql`
+- `supabase/migrations/0004_rls_identity_access.sql`
 - `supabase/storage.sql`
 - `supabase/seed.sql`
+
+For the actual click-by-click dashboard setup, use:
+
+- [docs/SUPABASE_SETUP_GUIDE.md](/c:/Users/dellf/Downloads/Codex_Creator_Challenge/docs/SUPABASE_SETUP_GUIDE.md)
 
 Do not replace the repo with a conflicting `frontend/`-only structure.
 
