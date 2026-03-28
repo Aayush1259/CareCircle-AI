@@ -98,6 +98,36 @@ describe("CareCircle API", () => {
     expect(response.body.message).toBe("Please enter a medication name and dose before saving.");
   });
 
+  it("updates an existing medication log when the same dose slot is logged twice", async () => {
+    const app = createServer();
+    const headers = await authHeader(app);
+    const medication = getState().medications[0];
+    const scheduledTime = "2030-01-01T08:00:00.000Z";
+    const persistSpy = vi.spyOn(persistenceService, "persistMedicationLog");
+
+    const firstResponse = await request(app)
+      .post(`/api/medications/${medication.id}/log`)
+      .set(headers)
+      .send({ scheduledTime, status: "taken" });
+
+    const secondResponse = await request(app)
+      .post(`/api/medications/${medication.id}/log`)
+      .set(headers)
+      .send({ scheduledTime, status: "missed" });
+
+    const matchingLogs = getState().medicationLogs.filter(
+      (log) => log.medicationId === medication.id && log.patientId === getState().patients[0].id && log.scheduledTime === scheduledTime,
+    );
+
+    expect(firstResponse.status).toBe(201);
+    expect(secondResponse.status).toBe(200);
+    expect(secondResponse.body.log.id).toBe(firstResponse.body.log.id);
+    expect(secondResponse.body.log.status).toBe("missed");
+    expect(secondResponse.body.log.takenAt).toBeNull();
+    expect(matchingLogs).toHaveLength(1);
+    expect(persistSpy).toHaveBeenCalledTimes(2);
+  });
+
   it("rejects blank care journal submissions with a helpful message", async () => {
     const app = createServer();
     const response = await request(app).post("/api/journal").set(await authHeader(app)).send({
@@ -176,6 +206,58 @@ describe("CareCircle API", () => {
 
     expect(response.status).toBe(200);
     expect(response.body.access.permissions.canLogVitals).toBe(true);
+  });
+
+  it("persists notification preference updates through settings", async () => {
+    const app = createServer();
+    const headers = await authHeader(app);
+    const persistUserSpy = vi.spyOn(persistenceService, "persistUser");
+
+    const response = await request(app)
+      .patch("/api/settings/notifications")
+      .set(headers)
+      .send({
+        medicationReminders: false,
+        weeklySummaryDay: "Friday",
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.notificationPreferences.medicationReminders).toBe(false);
+    expect(response.body.notificationPreferences.weeklySummaryDay).toBe("Friday");
+    expect(persistUserSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        notificationPreferences: expect.objectContaining({
+          medicationReminders: false,
+          weeklySummaryDay: "Friday",
+        }),
+      }),
+    );
+  });
+
+  it("persists display preference updates through settings", async () => {
+    const app = createServer();
+    const headers = await authHeader(app);
+    const persistSettingsSpy = vi.spyOn(persistenceService, "persistSettings");
+
+    const response = await request(app)
+      .patch("/api/settings/display")
+      .set(headers)
+      .send({
+        fontSize: "large",
+        highContrast: true,
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.settings.display.fontSize).toBe("large");
+    expect(response.body.settings.display.highContrast).toBe(true);
+    expect(persistSettingsSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        display: expect.objectContaining({
+          fontSize: "large",
+          highContrast: true,
+        }),
+      }),
+    );
   });
 
   it("preserves an invited secondary caregiver role on login", async () => {

@@ -1067,19 +1067,33 @@ export const createServer = () => {
     }
 
     const body = request.body as Partial<MedicationLogRecord>;
-    const log: MedicationLogRecord = {
+    const patientId = getPatient().id;
+    const scheduledTime = body.scheduledTime ?? new Date().toISOString();
+    const status = body.status ?? "taken";
+    const existingLog = state.medicationLogs.find(
+      (item) => item.medicationId === medication.id && item.patientId === patientId && item.scheduledTime === scheduledTime,
+    );
+    const log: MedicationLogRecord = existingLog ?? {
       id: nextId("log"),
       medicationId: medication.id,
-      patientId: getPatient().id,
-      scheduledTime: body.scheduledTime ?? new Date().toISOString(),
-      takenAt: body.status === "missed" ? null : new Date().toISOString(),
-      status: body.status ?? "taken",
-      notes: body.notes ?? "",
+      patientId,
+      scheduledTime,
+      takenAt: null,
+      status,
+      notes: "",
       loggedBy: getViewer().id,
       createdAt: new Date().toISOString(),
     };
 
-    state.medicationLogs.unshift(log);
+    log.status = status;
+    log.scheduledTime = scheduledTime;
+    log.takenAt = status === "taken" ? new Date().toISOString() : null;
+    log.notes = trimmedText(body.notes ?? "");
+    log.loggedBy = getViewer().id;
+
+    if (!existingLog) {
+      state.medicationLogs.unshift(log);
+    }
     await persistenceService.persistMedicationLog(log);
     recordActivity({
       userId: getViewer().id,
@@ -1093,7 +1107,7 @@ export const createServer = () => {
       resourceId: log.id,
       detail: `Logged ${medication.name} as ${log.status}`,
     });
-    response.status(201).json({ log, dashboard: getDashboardSummary() });
+    response.status(existingLog ? 200 : 201).json({ log, dashboard: getDashboardSummary() });
   }));
 
   app.get("/api/journal", (_request, response) => {
@@ -2147,9 +2161,14 @@ export const createServer = () => {
     viewer.name = name;
     viewer.phone = phone || undefined;
     viewer.photoUrl = photoUrl || viewer.photoUrl;
+    viewer.lastLogin = new Date().toISOString();
     const current = state.settings.find((item) => item.userId === viewer.id);
     if (current) {
       current.updatedAt = new Date().toISOString();
+    }
+    await persistenceService.persistUser(viewer);
+    if (current) {
+      await persistenceService.persistSettings(current);
     }
 
     recordAudit({
@@ -2189,7 +2208,7 @@ export const createServer = () => {
     response.status(201).json({ message: `We sent a confirmation link to ${email}.` });
   }));
 
-  app.post("/api/settings/profile/email-change/confirm", (request, response) => {
+  app.post("/api/settings/profile/email-change/confirm", asyncHandler(async (request, response) => {
     const token = trimmedText(request.body?.token);
     const pending = getPendingEmailUpdateByToken(token);
     if (!pending) {
@@ -2205,6 +2224,7 @@ export const createServer = () => {
     pending.confirmedAt = new Date().toISOString();
     const viewer = getViewer();
     viewer.email = pending.nextEmail;
+    await persistenceService.persistUser(viewer);
     recordAudit({
       action: "profile_updated",
       resourceType: "profile",
@@ -2212,9 +2232,9 @@ export const createServer = () => {
       detail: `Confirmed email change to ${pending.nextEmail}`,
     });
     response.json({ viewer });
-  });
+  }));
 
-  app.put("/api/settings/patient", (request, response) => {
+  app.put("/api/settings/patient", asyncHandler(async (request, response) => {
     if (!requireCapability(response, "edit_patient", "You do not have permission to update the patient profile.")) return;
     const patient = getPatient();
     const name = trimmedText(request.body?.name);
@@ -2237,6 +2257,7 @@ export const createServer = () => {
     patient.allergies = optionalStringArray(request.body?.allergies);
     patient.mobilityLevel = trimmedText(request.body?.mobilityLevel) || patient.mobilityLevel;
     patient.updatedAt = new Date().toISOString();
+    await persistenceService.persistPatient(patient);
 
     addActivity({
       userId: getViewer().id,
@@ -2252,7 +2273,7 @@ export const createServer = () => {
     });
 
     response.json({ patient });
-  });
+  }));
 
   app.get("/api/settings/access", (_request, response) => {
     if (!requireCapability(response, "manage_family", "You do not have permission to manage care team access.")) return;
@@ -2353,12 +2374,13 @@ export const createServer = () => {
     });
   }));
 
-  app.patch("/api/settings/notifications", (request, response) => {
+  app.patch("/api/settings/notifications", asyncHandler(async (request, response) => {
     const viewer = getViewer();
     viewer.notificationPreferences = {
       ...viewer.notificationPreferences,
       ...request.body,
     };
+    await persistenceService.persistUser(viewer);
     recordAudit({
       action: "notification_updated",
       resourceType: "notification_preferences",
@@ -2366,9 +2388,9 @@ export const createServer = () => {
       detail: "Updated notification settings",
     });
     response.json({ notificationPreferences: viewer.notificationPreferences });
-  });
+  }));
 
-  app.patch("/api/settings/display", (request, response) => {
+  app.patch("/api/settings/display", asyncHandler(async (request, response) => {
     const current = state.settings.find((item) => item.userId === getViewer().id);
     if (current) {
       current.display = {
@@ -2376,6 +2398,7 @@ export const createServer = () => {
         ...request.body,
       };
       current.updatedAt = new Date().toISOString();
+      await persistenceService.persistSettings(current);
     }
     recordAudit({
       action: "display_updated",
@@ -2384,9 +2407,9 @@ export const createServer = () => {
       detail: "Updated display settings",
     });
     response.json({ settings: current });
-  });
+  }));
 
-  app.put("/api/settings", (request, response) => {
+  app.put("/api/settings", asyncHandler(async (request, response) => {
     const current = state.settings.find((item) => item.userId === getViewer().id);
     if (current && request.body?.display) {
       current.display = {
@@ -2394,17 +2417,18 @@ export const createServer = () => {
         ...request.body.display,
       };
       current.updatedAt = new Date().toISOString();
+      await persistenceService.persistSettings(current);
     }
     response.json({ settings: current });
-  });
+  }));
 
   app.post("/api/settings/feedback", (request, response) => {
     const subject = trimmedText(request.body?.subject) as FeedbackSubject;
     const message = trimmedText(request.body?.message);
     const replyEmail = trimmedText(request.body?.replyEmail);
 
-    if (!hasText(message) || message.length < 100) {
-      sendValidationError(response, "Please share at least 100 characters so we can understand the issue.");
+    if (!hasText(message) || message.length < 30) {
+      sendValidationError(response, "Please share at least 30 characters so we can understand the issue.");
       return;
     }
 

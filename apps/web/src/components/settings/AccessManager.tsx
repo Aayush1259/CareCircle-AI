@@ -143,6 +143,19 @@ export const AccessManager = () => {
     }
   };
 
+  const resendInvite = async (record: PatientAccessRecord) => {
+    setSavingRecord(record.id);
+    try {
+      await request(`/family/invite/${record.id}/resend`, { method: "POST" });
+      toast.success("Invite resent.");
+      await refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to resend invite.");
+    } finally {
+      setSavingRecord(null);
+    }
+  };
+
   return (
     <Card>
       <SectionHeader
@@ -214,14 +227,25 @@ export const AccessManager = () => {
                         Restore Access
                       </Button>
                     ) : (
-                      <Button
-                        variant="danger"
-                        onClick={() => void updateJoinStatus(record, "revoked")}
-                        disabled={savingRecord === record.id}
-                      >
-                        <UserMinus className="h-4 w-4" />
-                        Revoke Access
-                      </Button>
+                      <div className="flex flex-wrap gap-2">
+                        {record.joinStatus === "pending" ? (
+                          <Button
+                            variant="secondary"
+                            onClick={() => void resendInvite(record)}
+                            disabled={savingRecord === record.id}
+                          >
+                            {savingRecord === record.id ? "Sending..." : "Resend Invite"}
+                          </Button>
+                        ) : null}
+                        <Button
+                          variant="danger"
+                          onClick={() => void updateJoinStatus(record, "revoked")}
+                          disabled={savingRecord === record.id}
+                        >
+                          <UserMinus className="h-4 w-4" />
+                          {record.joinStatus === "pending" ? "Cancel Invite" : "Revoke Access"}
+                        </Button>
+                      </div>
                     )}
                   </div>
 

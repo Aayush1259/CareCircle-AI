@@ -1,8 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Lock, Search, Sparkles } from "lucide-react";
 import toast from "react-hot-toast";
 import type { CareJournalRecord } from "@carecircle/shared";
-import { Badge, Button, Card, Field, Input, Modal, SectionHeader, Select, Textarea, Toggle } from "@/components/ui";
+import { Badge, Button, Card, EmptyState, Field, Input, Modal, SectionHeader, Select, Textarea, Toggle } from "@/components/ui";
 import { useAppData } from "@/context/AppDataContext";
 import { formatDate, relativeTime } from "@/lib/format";
 import { resolveViewerRole } from "@/lib/roles";
@@ -27,6 +27,9 @@ export const JournalPage = () => {
     doctor_topics: string[];
     positives: string[];
   } | null>(null);
+  const [saveBusy, setSaveBusy] = useState(false);
+  const [analyzingEntryId, setAnalyzingEntryId] = useState<string | null>(null);
+  const [patternBusy, setPatternBusy] = useState(false);
   const [form, setForm] = useState({
     date: new Date().toISOString().slice(0, 10),
     time: new Date().toTimeString().slice(0, 5),
@@ -67,6 +70,35 @@ export const JournalPage = () => {
 
   const selectedEntry = entries.find((entry) => entry.id === selectedId) ?? entries[0];
 
+  useEffect(() => {
+    if (!selectedEntry && selectedId !== null) {
+      setSelectedId(null);
+      return;
+    }
+    if (selectedEntry && selectedEntry.id !== selectedId) {
+      setSelectedId(selectedEntry.id);
+    }
+  }, [selectedEntry, selectedId]);
+
+  const resetForm = () =>
+    setForm({
+      date: new Date().toISOString().slice(0, 10),
+      time: new Date().toTimeString().slice(0, 5),
+      entryTitle: "",
+      entryBody: "",
+      mood: 3,
+      painLevel: 2,
+      severity: "low",
+      tags: [],
+      followUpNeeded: false,
+      followUpNote: "",
+    });
+
+  const closeModal = () => {
+    if (saveBusy) return;
+    setModalOpen(false);
+  };
+
   const saveEntry = async () => {
     const date = trimmedText(form.date);
     const entryBody = trimmedText(form.entryBody);
@@ -82,8 +114,9 @@ export const JournalPage = () => {
       return;
     }
 
+    setSaveBusy(true);
     try {
-      await request("/journal", {
+      const result = await request<{ entry: CareJournalRecord }>("/journal", {
         method: "POST",
         body: JSON.stringify({
           ...form,
@@ -95,36 +128,33 @@ export const JournalPage = () => {
         }),
       });
       toast.success("Care note saved.");
+      setSelectedId(result.entry.id);
       setModalOpen(false);
-      setForm({
-        date: new Date().toISOString().slice(0, 10),
-        time: new Date().toTimeString().slice(0, 5),
-        entryTitle: "",
-        entryBody: "",
-        mood: 3,
-        painLevel: 2,
-        severity: "low",
-        tags: [],
-        followUpNeeded: false,
-        followUpNote: "",
-      });
+      resetForm();
+      setPatternReport(null);
       await refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setSaveBusy(false);
     }
   };
 
   const analyzeEntry = async (entry: CareJournalRecord) => {
+    setAnalyzingEntryId(entry.id);
     try {
       await request(`/journal/${entry.id}/analyze`, { method: "POST" });
       toast.success("AI analysis is ready.");
       await refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setAnalyzingEntryId(null);
     }
   };
 
   const analyzePatterns = async () => {
+    setPatternBusy(true);
     try {
       const result = await request<{
         patterns: string[];
@@ -135,6 +165,8 @@ export const JournalPage = () => {
       setPatternReport(result);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setPatternBusy(false);
     }
   };
 
@@ -150,7 +182,7 @@ export const JournalPage = () => {
                 ? "Review what caregivers have shared and add context when needed."
                 : "Search, filter, and find what changed."
           }
-          action={canLogJournal ? <Button onClick={() => setModalOpen(true)}>New entry</Button> : undefined}
+          action={canLogJournal ? <Button onClick={() => setModalOpen(true)} disabled={saveBusy}>New entry</Button> : undefined}
         />
         <div className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,180px)]">
@@ -167,24 +199,28 @@ export const JournalPage = () => {
             </Select>
           </div>
           <div className="space-y-3">
-            {entries.map((entry) => (
-              <button
-                key={entry.id}
-                type="button"
-                onClick={() => setSelectedId(entry.id)}
-                className={`w-full rounded-3xl border p-4 text-left ${selectedEntry?.id === entry.id ? "border-brand bg-brandSoft/50" : "border-borderColor bg-white"}`}
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="font-bold text-textPrimary">{entry.entryTitle}</p>
-                  <Badge tone={severityTone[entry.severity]}>{entry.severity}</Badge>
-                  {entry.isNew ? <Badge tone="brand">NEW</Badge> : null}
-                </div>
-                <p className="mt-1 text-sm text-textSecondary">
-                  {formatDate(entry.date)} at {entry.time}
-                </p>
-                <p className="mt-2 text-sm text-textSecondary">{entry.entryBody.slice(0, 90)}...</p>
-              </button>
-            ))}
+            {entries.length === 0 ? (
+              <EmptyState title="No journal entries match" description="Try a different search or add a new care note." />
+            ) : (
+              entries.map((entry) => (
+                <button
+                  key={entry.id}
+                  type="button"
+                  onClick={() => setSelectedId(entry.id)}
+                  className={`w-full rounded-3xl border p-4 text-left ${selectedEntry?.id === entry.id ? "border-brand bg-brandSoft/50" : "border-borderColor bg-white"}`}
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-bold text-textPrimary">{entry.entryTitle}</p>
+                    <Badge tone={severityTone[entry.severity]}>{entry.severity}</Badge>
+                    {entry.isNew ? <Badge tone="brand">NEW</Badge> : null}
+                  </div>
+                  <p className="mt-1 text-sm text-textSecondary">
+                    {formatDate(entry.date)} at {entry.time}
+                  </p>
+                  <p className="mt-2 text-sm text-textSecondary">{entry.entryBody.slice(0, 90)}...</p>
+                </button>
+              ))
+            )}
           </div>
         </div>
       </Card>
@@ -196,9 +232,9 @@ export const JournalPage = () => {
               title={selectedEntry.entryTitle}
               description={`${formatDate(selectedEntry.date)} at ${selectedEntry.time} | ${relativeTime(selectedEntry.createdAt)}`}
               action={canAnalyzeEntries ? (
-                <Button variant="secondary" onClick={() => analyzeEntry(selectedEntry)}>
+                <Button variant="secondary" onClick={() => analyzeEntry(selectedEntry)} disabled={analyzingEntryId === selectedEntry.id}>
                   <Sparkles className="h-4 w-4" />
-                  AI analysis
+                  {analyzingEntryId === selectedEntry.id ? "Analyzing..." : "AI analysis"}
                 </Button>
               ) : undefined}
             />
@@ -264,7 +300,7 @@ export const JournalPage = () => {
                 ? "Let CareCircle scan recent notes for trends, concerns, and bright spots."
                 : "AI pattern analysis is reserved for caregivers and clinicians."
             }
-            action={canViewAiInsights ? <Button onClick={analyzePatterns}>Analyze last 30 days</Button> : undefined}
+            action={canViewAiInsights ? <Button onClick={analyzePatterns} disabled={patternBusy}>{patternBusy ? "Analyzing..." : "Analyze last 30 days"}</Button> : undefined}
           />
           {canViewAiInsights && patternReport ? (
             <div className="grid gap-4 md:grid-cols-2">
@@ -319,7 +355,7 @@ export const JournalPage = () => {
         </Card>
       </div>
 
-      <Modal open={modalOpen && canLogJournal} title="New care journal entry" onClose={() => setModalOpen(false)}>
+      <Modal open={modalOpen && canLogJournal} title="New care journal entry" onClose={closeModal}>
         <form
           className="grid gap-4"
           onSubmit={(event) => {
@@ -399,8 +435,8 @@ export const JournalPage = () => {
             </Field>
           ) : null}
           <div className="flex justify-end gap-3">
-            <Button type="button" variant="ghost" onClick={() => setModalOpen(false)}>Cancel</Button>
-            <Button type="submit">Save entry</Button>
+            <Button type="button" variant="ghost" onClick={closeModal} disabled={saveBusy}>Cancel</Button>
+            <Button type="submit" disabled={saveBusy}>{saveBusy ? "Saving..." : "Save entry"}</Button>
           </div>
         </form>
       </Modal>

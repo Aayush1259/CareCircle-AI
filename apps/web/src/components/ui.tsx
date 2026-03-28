@@ -146,26 +146,33 @@ export const Toggle = ({
   disabled?: boolean;
   "aria-label"?: string;
 }) => (
-  <div className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full">
+  <div className="inline-flex shrink-0 items-center">
     <button
       type="button"
       onClick={() => onChange(!checked)}
       disabled={disabled}
       className={cn(
-        "relative h-[26px] w-[48px] overflow-hidden rounded-full border border-black/5 p-[3px] shadow-[inset_0_1px_2px_rgba(15,23,42,0.18)] transition-all duration-[220ms] [transition-timing-function:cubic-bezier(0.4,0,0.2,1)] focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand",
+        "relative inline-flex h-8 w-[58px] items-center rounded-full border p-1 shadow-[inset_0_1px_2px_rgba(15,23,42,0.08),0_10px_24px_rgba(15,23,42,0.08)] transition-all duration-[220ms] [transition-timing-function:cubic-bezier(0.4,0,0.2,1)] focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand",
         checked
-          ? "bg-gradient-to-b from-brand to-brandDark"
-          : "bg-gradient-to-b from-slate-200 to-slate-300",
-        disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
+          ? "border-brand/70 bg-gradient-to-r from-brand to-brandDark"
+          : "border-slate-300 bg-gradient-to-r from-slate-100 to-slate-200",
+        disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:shadow-[inset_0_1px_2px_rgba(15,23,42,0.08),0_12px_28px_rgba(15,23,42,0.12)]",
       )}
       role="switch"
       aria-checked={checked}
       aria-label={ariaLabel}
     >
       <span
+        aria-hidden="true"
         className={cn(
-          "absolute top-[3px] h-[20px] w-[20px] rounded-full border border-black/5 bg-white shadow-[0_2px_6px_rgba(15,23,42,0.24)] transition-all duration-[220ms] [transition-timing-function:cubic-bezier(0.4,0,0.2,1)]",
-          checked ? "translate-x-[22px]" : "translate-x-0",
+          "pointer-events-none absolute inset-[3px] rounded-full transition-opacity duration-[220ms]",
+          checked ? "bg-white/10 opacity-100" : "bg-white/55 opacity-100",
+        )}
+      />
+      <span
+        className={cn(
+          "relative z-[1] h-6 w-6 rounded-full border border-white/80 bg-white shadow-[0_6px_16px_rgba(15,23,42,0.18)] transition-all duration-[220ms] [transition-timing-function:cubic-bezier(0.4,0,0.2,1)]",
+          checked ? "translate-x-[26px]" : "translate-x-0",
         )}
       />
     </button>

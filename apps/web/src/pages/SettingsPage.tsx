@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Download, ExternalLink, PlayCircle, Send, Trash2, ShieldAlert } from "lucide-react";
 import toast from "react-hot-toast";
-import type { FeedbackSubject } from "@carecircle/shared";
+import type { DisplayPreferences, FeedbackSubject, NotificationPreferences } from "@carecircle/shared";
 import { Button, Card, Field, Input, Modal, SectionHeader, Select, Textarea, Toggle } from "@/components/ui";
 import { useAppData } from "@/context/AppDataContext";
-import { apiBase } from "@/lib/api";
+import { apiFileRequest } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { trimmedText } from "@/lib/validation";
 
@@ -40,16 +40,43 @@ const initialFeedback = {
   replyEmail: "",
 };
 
+const feedbackMinLength = 30;
+const defaultNotificationPreferences: NotificationPreferences = {
+  medicationReminders: true,
+  medicationReminderTime: "08:00",
+  appointment24h: true,
+  appointment1h: true,
+  weeklySummary: true,
+  weeklySummaryDay: "Sunday",
+  aiInsightAlerts: true,
+  familyActivityUpdates: true,
+  timezone: "America/Los_Angeles",
+};
+const defaultDisplayPreferences: DisplayPreferences = {
+  fontSize: "normal",
+  colorTheme: "teal",
+  dashboardLayout: "detailed",
+  highContrast: false,
+};
+
 export const SettingsPage = () => {
-  const { bootstrap, request, refresh, logout } = useAppData();
+  const { bootstrap, request, refresh, logout, requestPasswordReset } = useAppData();
   const [params, setParams] = useSearchParams();
   const [videoOpen, setVideoOpen] = useState<string | null>(null);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteText, setDeleteText] = useState("");
   const [feedbackForm, setFeedbackForm] = useState(initialFeedback);
-  const [savedToggleKey, setSavedToggleKey] = useState("");
+  const [notificationDraft, setNotificationDraft] = useState<NotificationPreferences>(() => bootstrap?.viewer.notificationPreferences ?? defaultNotificationPreferences);
+  const [displayDraft, setDisplayDraft] = useState<DisplayPreferences>(
+    () => bootstrap?.data.settings.find((item) => item.userId === bootstrap.viewer.id)?.display ?? defaultDisplayPreferences,
+  );
   const [feedbackSaving, setFeedbackSaving] = useState(false);
+  const [notificationSaving, setNotificationSaving] = useState(false);
+  const [displaySaving, setDisplaySaving] = useState(false);
+  const [exportingKey, setExportingKey] = useState("");
+  const [passwordResetSending, setPasswordResetSending] = useState(false);
+  const [deleteSaving, setDeleteSaving] = useState(false);
   const blockedTabRef = useRef<string | null>(null);
 
   // Tabbed layout state
@@ -72,8 +99,9 @@ export const SettingsPage = () => {
           body: JSON.stringify({ token }),
         });
         toast.success("Your email address is confirmed.");
-        params.delete("confirmEmail");
-        setParams(params);
+        const nextParams = new URLSearchParams(params);
+        nextParams.delete("confirmEmail");
+        setParams(nextParams, { replace: true });
         await refresh();
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "We could not confirm that email.");
@@ -93,32 +121,100 @@ export const SettingsPage = () => {
     blockedTabRef.current = null;
   }, [activeTab, canEditPatient, canManageFamily, setParams]);
 
+  useEffect(() => {
+    if (!bootstrap) return;
+    setNotificationDraft(bootstrap.viewer.notificationPreferences);
+  }, [bootstrap?.viewer.id]);
+
+  useEffect(() => {
+    if (!currentSettings) return;
+    setDisplayDraft(currentSettings.display);
+  }, [currentSettings?.userId]);
+
+  useEffect(() => {
+    if (activeTab !== "notifications") return undefined;
+    const root = document.documentElement;
+    const previousTheme = root.dataset.theme;
+    const previousFontScale = root.dataset.fontScale;
+    const previousContrast = root.dataset.contrast;
+
+    root.dataset.theme = displayDraft.colorTheme;
+    root.dataset.fontScale = displayDraft.fontSize;
+    root.dataset.contrast = displayDraft.highContrast ? "high" : "normal";
+
+    return () => {
+      root.dataset.theme = previousTheme ?? currentSettings?.display.colorTheme ?? "teal";
+      root.dataset.fontScale = previousFontScale ?? currentSettings?.display.fontSize ?? "normal";
+      root.dataset.contrast = previousContrast ?? (currentSettings?.display.highContrast ? "high" : "normal");
+    };
+  }, [activeTab, currentSettings?.display.colorTheme, currentSettings?.display.fontSize, currentSettings?.display.highContrast, displayDraft]);
+
   if (!bootstrap || !currentSettings) return null;
 
-  const updateNotification = async (key: string, value: unknown) => {
+  const notificationDirty = JSON.stringify(notificationDraft) !== JSON.stringify(bootstrap.viewer.notificationPreferences);
+  const displayDirty = JSON.stringify(displayDraft) !== JSON.stringify(currentSettings.display);
+
+  const saveNotifications = async () => {
+    setNotificationSaving(true);
     try {
       await request("/settings/notifications", {
         method: "PATCH",
-        body: JSON.stringify({ [key]: value }),
+        body: JSON.stringify(notificationDraft),
       });
-      setSavedToggleKey(key);
-      window.setTimeout(() => setSavedToggleKey(""), 1500);
+      toast.success("Notification settings saved.");
       await refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setNotificationSaving(false);
     }
   };
 
-  const updateDisplay = async (patch: Record<string, unknown>) => {
+  const saveDisplay = async () => {
+    setDisplaySaving(true);
     try {
       await request("/settings/display", {
         method: "PATCH",
-        body: JSON.stringify(patch),
+        body: JSON.stringify(displayDraft),
       });
       toast.success("Display updated.");
       await refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setDisplaySaving(false);
+    }
+  };
+
+  const downloadExport = async (path: string, fallbackFileName: string, key: string) => {
+    setExportingKey(key);
+    try {
+      const { blob, fileName } = await apiFileRequest(path);
+      const objectUrl = window.URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = fileName ?? fallbackFileName;
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(objectUrl);
+      toast.success("Download started.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Download failed. Please try again.");
+    } finally {
+      setExportingKey("");
+    }
+  };
+
+  const sendPasswordResetLink = async () => {
+    setPasswordResetSending(true);
+    try {
+      const result = await requestPasswordReset(bootstrap.viewer.email);
+      toast.success(result.message);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "We could not send the reset email.");
+    } finally {
+      setPasswordResetSending(false);
     }
   };
 
@@ -140,12 +236,15 @@ export const SettingsPage = () => {
   };
 
   const deleteAccount = async () => {
+    setDeleteSaving(true);
     try {
       await request("/settings/account", { method: "DELETE" });
       toast.success("Your account was removed from this session.");
       await logout();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setDeleteSaving(false);
     }
   };
 
@@ -159,7 +258,9 @@ export const SettingsPage = () => {
   ].filter((t) => t.visible !== false);
 
   const handleTabChange = (tabId: string) => {
-    setParams({ tab: tabId }, { replace: true });
+    const nextParams = new URLSearchParams(params);
+    nextParams.set("tab", tabId);
+    setParams(nextParams, { replace: true });
   };
 
   return (
@@ -170,6 +271,7 @@ export const SettingsPage = () => {
           {tabs.map((tab) => (
             <button
               key={tab.id}
+              type="button"
               onClick={() => handleTabChange(tab.id)}
               className={`rounded-full px-5 py-2.5 text-sm font-semibold transition-all ${
                 activeTab === tab.id
@@ -191,7 +293,24 @@ export const SettingsPage = () => {
         {activeTab === "notifications" && (
           <div className="grid gap-6 lg:grid-cols-2">
             <Card>
-              <SectionHeader title="Notifications" description="Turn on the nudges that actually help." />
+              <SectionHeader
+                title="Notifications"
+                description="Turn on the nudges that actually help."
+                action={
+                  <div className="flex gap-2">
+                    <Button
+                      variant="ghost"
+                      onClick={() => setNotificationDraft(bootstrap.viewer.notificationPreferences)}
+                      disabled={!notificationDirty || notificationSaving}
+                    >
+                      Reset
+                    </Button>
+                    <Button onClick={() => void saveNotifications()} disabled={!notificationDirty || notificationSaving}>
+                      {notificationSaving ? "Saving..." : "Save changes"}
+                    </Button>
+                  </div>
+                }
+              />
               <div className="space-y-4">
                 {[
                   ["Medication reminders", "medicationReminders"],
@@ -201,24 +320,51 @@ export const SettingsPage = () => {
                   ["AI insight alerts", "aiInsightAlerts"],
                   ["Family activity updates", "familyActivityUpdates"],
                 ].map(([label, key]) => (
-                  <div key={key} className="flex items-center justify-between rounded-3xl border border-borderColor p-4">
+                  <div key={key} className="flex items-center justify-between gap-4 rounded-[28px] border border-borderColor/80 bg-white p-4 shadow-sm">
                     <div>
                       <p className="font-semibold text-textPrimary">{label}</p>
-                      <p className="text-sm text-textSecondary">{savedToggleKey === key ? "Saved" : "You can change this any time."}</p>
+                      <p className="text-sm text-textSecondary">
+                        {notificationDraft[key as keyof NotificationPreferences] ? "Enabled" : "Off"}
+                      </p>
                     </div>
                     <Toggle
-                      checked={Boolean(bootstrap.viewer.notificationPreferences[key as keyof typeof bootstrap.viewer.notificationPreferences])}
-                      onChange={(value) => void updateNotification(key, value)}
+                      checked={Boolean(notificationDraft[key as keyof NotificationPreferences])}
+                      onChange={(value) =>
+                        setNotificationDraft((current) => ({
+                          ...current,
+                          [key]: value,
+                        }))
+                      }
+                      disabled={notificationSaving}
                       aria-label={label}
                     />
                   </div>
                 ))}
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label="Reminder time">
-                    <Input type="time" value={bootstrap.viewer.notificationPreferences.medicationReminderTime} onChange={(event) => void updateNotification("medicationReminderTime", event.target.value)} />
+                  <Field label="Reminder time" hint="Used when medication reminders are turned on.">
+                    <Input
+                      type="time"
+                      value={notificationDraft.medicationReminderTime}
+                      disabled={notificationSaving || !notificationDraft.medicationReminders}
+                      onChange={(event) =>
+                        setNotificationDraft((current) => ({
+                          ...current,
+                          medicationReminderTime: event.target.value,
+                        }))
+                      }
+                    />
                   </Field>
                   <Field label="Weekly summary day">
-                    <Select value={bootstrap.viewer.notificationPreferences.weeklySummaryDay} onChange={(event) => void updateNotification("weeklySummaryDay", event.target.value)}>
+                    <Select
+                      value={notificationDraft.weeklySummaryDay}
+                      disabled={notificationSaving || !notificationDraft.weeklySummary}
+                      onChange={(event) =>
+                        setNotificationDraft((current) => ({
+                          ...current,
+                          weeklySummaryDay: event.target.value,
+                        }))
+                      }
+                    >
                       {["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((day) => (
                         <option key={day} value={day}>{day}</option>
                       ))}
@@ -229,7 +375,24 @@ export const SettingsPage = () => {
             </Card>
 
             <Card>
-              <SectionHeader title="Display settings" description="Make the whole app easier to read at a glance." />
+              <SectionHeader
+                title="Display settings"
+                description="Make the whole app easier to read at a glance."
+                action={
+                  <div className="flex gap-2">
+                    <Button
+                      variant="ghost"
+                      onClick={() => setDisplayDraft(currentSettings.display)}
+                      disabled={!displayDirty || displaySaving}
+                    >
+                      Reset
+                    </Button>
+                    <Button onClick={() => void saveDisplay()} disabled={!displayDirty || displaySaving}>
+                      {displaySaving ? "Saving..." : "Apply changes"}
+                    </Button>
+                  </div>
+                }
+              />
               <div className="grid gap-5">
                 <div>
                   <p className="field-label">Font size</p>
@@ -242,10 +405,20 @@ export const SettingsPage = () => {
                       <button
                         key={value}
                         type="button"
-                        className={`rounded-3xl border p-4 text-left ${currentSettings.display.fontSize === value ? "border-brand bg-brandSoft" : "border-borderColor bg-white hover:bg-slate-50"}`}
-                        onClick={() => void updateDisplay({ fontSize: value })}
+                        className={`rounded-[28px] border p-4 text-left transition ${
+                          displayDraft.fontSize === value ? "border-brand bg-brandSoft shadow-sm" : "border-borderColor bg-white hover:bg-slate-50"
+                        }`}
+                        onClick={() =>
+                          setDisplayDraft((current) => ({
+                            ...current,
+                            fontSize: value as DisplayPreferences["fontSize"],
+                          }))
+                        }
                       >
                         <p className="font-semibold text-textPrimary">{label}</p>
+                        <p className="mt-1 text-sm text-textSecondary">
+                          {value === "normal" ? "Balanced" : value === "large" ? "More readable" : "Highest visibility"}
+                        </p>
                       </button>
                     ))}
                   </div>
@@ -261,21 +434,38 @@ export const SettingsPage = () => {
                       <button
                         key={value}
                         type="button"
-                        className={`rounded-3xl border p-4 text-left ${currentSettings.display.colorTheme === value ? "border-brand bg-brandSoft" : "border-borderColor bg-white hover:bg-slate-50"}`}
-                        onClick={() => void updateDisplay({ colorTheme: value })}
+                        className={`rounded-[28px] border p-4 text-left transition ${
+                          displayDraft.colorTheme === value ? "border-brand bg-brandSoft shadow-sm" : "border-borderColor bg-white hover:bg-slate-50"
+                        }`}
+                        onClick={() =>
+                          setDisplayDraft((current) => ({
+                            ...current,
+                            colorTheme: value as DisplayPreferences["colorTheme"],
+                          }))
+                        }
                       >
-                        <span className="mb-3 block h-8 w-full rounded-2xl" style={{ backgroundColor: color }} />
+                        <span className="mb-3 block h-8 w-full rounded-full" style={{ backgroundColor: color }} />
                         <p className="font-semibold capitalize text-textPrimary">{value}</p>
                       </button>
                     ))}
                   </div>
                 </div>
-                <div className="flex items-center justify-between rounded-3xl border border-borderColor p-4">
+                <div className="flex items-center justify-between gap-4 rounded-[28px] border border-borderColor/80 bg-white p-4 shadow-sm">
                   <div>
                     <p className="font-semibold text-textPrimary">High contrast mode</p>
                     <p className="text-sm text-textSecondary">Boost visual clarity across the whole app.</p>
                   </div>
-                  <Toggle checked={currentSettings.display.highContrast} onChange={(value) => void updateDisplay({ highContrast: value })} aria-label="High contrast mode" />
+                  <Toggle
+                    checked={displayDraft.highContrast}
+                    onChange={(value) =>
+                      setDisplayDraft((current) => ({
+                        ...current,
+                        highContrast: value,
+                      }))
+                    }
+                    disabled={displaySaving}
+                    aria-label="High contrast mode"
+                  />
                 </div>
               </div>
             </Card>
@@ -292,34 +482,77 @@ export const SettingsPage = () => {
                   : "Personal account controls live here. Patient exports and security logs stay with the primary caregiver."
               }
             />
-            <div className="grid gap-4 lg:grid-cols-3">
-              {canExport ? (
-                <>
-                  <Button
-                    title="Download a CSV export of the patient workspace."
-                    onClick={() => window.open(`${apiBase}/settings/export/csv`, "_blank", "noopener,noreferrer")}
-                  >
-                    <Download className="h-4 w-4" />
-                    Export My Data
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    title="Download a ZIP of patient documents."
-                    onClick={() => window.open(`${apiBase}/settings/export/documents.zip`, "_blank", "noopener,noreferrer")}
-                  >
-                    <Download className="h-4 w-4" />
-                    Download All Documents
-                  </Button>
-                </>
-              ) : (
-                <div className="rounded-3xl border border-dashed border-borderColor p-4 text-sm text-textSecondary lg:col-span-2">
-                  This role can manage its own account settings, but patient export tools are only visible to the primary caregiver.
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+              <div className="space-y-4">
+                <div className="rounded-[28px] border border-borderColor/80 bg-white p-5 shadow-sm">
+                  <p className="text-base font-semibold text-textPrimary">Account security</p>
+                  <p className="mt-1 text-sm text-textSecondary">
+                    Send a password reset link to {bootstrap.viewer.email} if you want to rotate your password safely.
+                  </p>
+                  <div className="mt-4">
+                    <Button variant="secondary" onClick={() => void sendPasswordResetLink()} disabled={passwordResetSending}>
+                      <ShieldAlert className="h-4 w-4" />
+                      {passwordResetSending ? "Sending..." : "Email password reset link"}
+                    </Button>
+                  </div>
                 </div>
-              )}
-              <Button variant="danger" onClick={() => setDeleteOpen(true)}>
-                <Trash2 className="h-4 w-4" />
-                Delete Account
-              </Button>
+
+                {canExport ? (
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="rounded-[28px] border border-borderColor/80 bg-white p-5 shadow-sm">
+                      <p className="font-semibold text-textPrimary">Export workspace data</p>
+                      <p className="mt-1 text-sm text-textSecondary">
+                        Download appointments, tasks, and journal entries as a CSV snapshot.
+                      </p>
+                      <Button
+                        className="mt-4 w-full"
+                        onClick={() => void downloadExport("/settings/export/csv", `CareCircle_Export_${new Date().toISOString().slice(0, 10)}.csv`, "csv")}
+                        disabled={exportingKey.length > 0}
+                      >
+                        <Download className="h-4 w-4" />
+                        {exportingKey === "csv" ? "Preparing..." : "Export my data"}
+                      </Button>
+                    </div>
+
+                    <div className="rounded-[28px] border border-borderColor/80 bg-white p-5 shadow-sm">
+                      <p className="font-semibold text-textPrimary">Download uploaded files</p>
+                      <p className="mt-1 text-sm text-textSecondary">
+                        Save a ZIP archive of the documents currently attached to this patient workspace.
+                      </p>
+                      <Button
+                        variant="secondary"
+                        className="mt-4 w-full"
+                        onClick={() =>
+                          void downloadExport(
+                            "/settings/export/documents.zip",
+                            `CareCircle_Documents_${new Date().toISOString().slice(0, 10)}.zip`,
+                            "documents",
+                          )
+                        }
+                        disabled={exportingKey.length > 0}
+                      >
+                        <Download className="h-4 w-4" />
+                        {exportingKey === "documents" ? "Preparing..." : "Download all documents"}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-[28px] border border-dashed border-borderColor p-5 text-sm text-textSecondary">
+                    This role can manage its own account settings, but patient export tools are only visible to the primary caregiver.
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-[28px] border border-red-200 bg-red-50 p-5">
+                <p className="text-base font-semibold text-red-900">Danger zone</p>
+                <p className="mt-1 text-sm text-red-900/80">
+                  Remove this account from the current session and sign out of the patient workspace immediately.
+                </p>
+                <Button variant="danger" className="mt-4 w-full" onClick={() => setDeleteOpen(true)} disabled={deleteSaving}>
+                  <Trash2 className="h-4 w-4" />
+                  Delete account
+                </Button>
+              </div>
             </div>
             {canViewAuditLog ? (
               <div className="mt-6 rounded-3xl border border-borderColor bg-slate-50 p-4">
@@ -347,7 +580,7 @@ export const SettingsPage = () => {
         {activeTab === "support" && (
           <div className="grid gap-6 lg:grid-cols-2">
             <Card>
-              <SectionHeader title="Help and support" description="Answers and quick guides without the tech jargon." action={<Button variant="ghost" onClick={() => setFeedbackOpen(true)}>Send Feedback</Button>} />
+              <SectionHeader title="Help and support" description="Answers and quick guides without the tech jargon." action={<Button variant="ghost" onClick={() => setFeedbackOpen(true)}>Send feedback</Button>} />
               <div className="space-y-3">
                 {faqs.map(([question, answer]) => (
                   <details key={question} className="rounded-3xl border border-borderColor p-4 bg-white/50 hover:bg-white transition-colors">
@@ -359,20 +592,44 @@ export const SettingsPage = () => {
             </Card>
 
             <Card>
-              <SectionHeader title="Video guides" description="Short walkthroughs for the moments you need extra confidence." />
-              <div className="grid gap-4 sm:grid-cols-2">
-                {videoGuides.map((guide) => (
-                  <div key={guide.title} className="rounded-3xl border border-borderColor p-4 bg-white/50">
-                    <div className="flex h-32 items-center justify-center rounded-2xl bg-gradient-to-br from-brand to-brandDark text-white shadow-md">
-                      <PlayCircle className="h-10 w-10 opacity-90 transition-opacity hover:opacity-100 cursor-pointer" onClick={() => setVideoOpen(guide.url)} />
+              <SectionHeader title="Guides and quick links" description="Short walkthroughs for the moments you need extra confidence." />
+              <div className="space-y-5">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {videoGuides.map((guide) => (
+                    <div key={guide.title} className="rounded-3xl border border-borderColor p-4 bg-white/50">
+                      <button
+                        type="button"
+                        className="flex h-32 w-full items-center justify-center rounded-2xl bg-gradient-to-br from-brand to-brandDark text-white shadow-md transition hover:opacity-95"
+                        onClick={() => setVideoOpen(guide.url)}
+                      >
+                        <PlayCircle className="h-10 w-10 opacity-90 transition-opacity hover:opacity-100" />
+                      </button>
+                      <p className="mt-4 text-base font-bold text-textPrimary line-clamp-1">{guide.title}</p>
+                      <p className="mt-1 text-sm text-textSecondary line-clamp-2">{guide.description}</p>
+                      <Button variant="secondary" className="mt-4 w-full" onClick={() => setVideoOpen(guide.url)}>
+                        Watch guide
+                      </Button>
                     </div>
-                    <p className="mt-4 text-base font-bold text-textPrimary line-clamp-1">{guide.title}</p>
-                    <p className="mt-1 text-sm text-textSecondary line-clamp-2">{guide.description}</p>
-                    <Button variant="secondary" className="mt-4 w-full" onClick={() => setVideoOpen(guide.url)}>
-                      Watch Guide
-                    </Button>
+                  ))}
+                </div>
+
+                <div className="rounded-[28px] border border-borderColor/80 bg-slate-50/80 p-5">
+                  <p className="text-base font-semibold text-textPrimary">Quick help links</p>
+                  <div className="mt-4 grid gap-3">
+                    {currentSettings.helpLinks.map((link) => (
+                      <a
+                        key={link.url}
+                        href={link.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center justify-between rounded-2xl border border-borderColor bg-white px-4 py-3 text-sm font-semibold text-textPrimary transition hover:bg-slate-50"
+                      >
+                        <span>{link.title}</span>
+                        <ExternalLink className="h-4 w-4 text-textSecondary" />
+                      </a>
+                    ))}
                   </div>
-                ))}
+                </div>
               </div>
             </Card>
           </div>
@@ -405,14 +662,14 @@ export const SettingsPage = () => {
           </Field>
           <Field label="Message">
             <Textarea value={feedbackForm.message} onChange={(event) => setFeedbackForm((current) => ({ ...current, message: event.target.value }))} placeholder="Please describe what happened..." />
-            <p className="mt-2 text-sm text-textSecondary">{feedbackForm.message.length} / 100 characters minimum</p>
+            <p className="mt-2 text-sm text-textSecondary">{feedbackForm.message.length} / {feedbackMinLength} characters minimum</p>
           </Field>
           <Field label="Reply email (optional)">
             <Input type="email" value={feedbackForm.replyEmail} onChange={(event) => setFeedbackForm((current) => ({ ...current, replyEmail: event.target.value }))} placeholder="you@example.com" />
           </Field>
-          <Button disabled={feedbackSaving || trimmedText(feedbackForm.message).length < 100} onClick={submitFeedback}>
+          <Button disabled={feedbackSaving || trimmedText(feedbackForm.message).length < feedbackMinLength} onClick={submitFeedback}>
             <Send className="h-4 w-4" />
-            {feedbackSaving ? "Sending..." : "Send Feedback"}
+            {feedbackSaving ? "Sending..." : "Send feedback"}
           </Button>
         </div>
       </Modal>
@@ -433,8 +690,10 @@ export const SettingsPage = () => {
           <p className="text-base font-semibold text-textPrimary">Type DELETE to confirm.</p>
           <Input value={deleteText} onChange={(event) => setDeleteText(event.target.value)} placeholder="DELETE" />
           <div className="flex justify-end gap-3 mt-2">
-            <Button variant="ghost" onClick={() => setDeleteOpen(false)}>Cancel</Button>
-            <Button variant="danger" disabled={deleteText !== "DELETE"} onClick={deleteAccount}>Delete Account</Button>
+            <Button variant="ghost" onClick={() => setDeleteOpen(false)} disabled={deleteSaving}>Cancel</Button>
+            <Button variant="danger" disabled={deleteText !== "DELETE" || deleteSaving} onClick={deleteAccount}>
+              {deleteSaving ? "Deleting..." : "Delete Account"}
+            </Button>
           </div>
         </div>
       </Modal>
