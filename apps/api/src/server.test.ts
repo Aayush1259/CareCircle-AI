@@ -1,20 +1,61 @@
+import jwt from "jsonwebtoken";
 import request from "supertest";
-import { beforeEach, describe, expect, it } from "vitest";
-import { resetState } from "./store";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { buildPatientAccessRecord, normalizePatientPermissions } from "@carecircle/shared";
+import { env } from "./env";
+import { getState, resetState } from "./store";
 import { createServer } from "./server";
+import { persistenceService } from "./services/persistence";
 
-const authHeader = async (app: ReturnType<typeof createServer>) => {
-  const loginResponse = await request(app).post("/api/auth/login").send({
-    email: "demo@carecircle.ai",
-    password: "Demo1234",
+const authHeader = async (_app: ReturnType<typeof createServer>) => {
+  const state = getState();
+  const viewer = state.users.find((user) => user.email === "demo@carecircle.ai");
+  const patient = state.patients[0];
+  const access =
+    state.patientAccess.find((record) => record.userId === viewer?.id && record.patientId === patient?.id) ??
+    (viewer && patient
+      ? buildPatientAccessRecord({
+          id: `access_${viewer.id}_${patient.id}`,
+          patientId: patient.id,
+          userId: viewer.id,
+          email: viewer.email,
+          name: viewer.name,
+          accessRole: "primary_caregiver",
+          accessLevel: "full_access",
+          permissions: normalizePatientPermissions("primary_caregiver", "full_access"),
+          invitedBy: viewer.id,
+          joinStatus: "active",
+          inviteToken: `invite_${viewer.id}`,
+          createdAt: patient.createdAt,
+          acceptedAt: patient.createdAt,
+          lastActive: viewer.lastLogin,
+        })
+      : null);
+
+  if (!viewer || !patient || !access) {
+    throw new Error("Unable to build a deterministic demo auth header for tests.");
+  }
+
+  const expiresAt = new Date(Date.now() + 1000 * 60 * 60).toISOString();
+  const token = jwt.sign({
+    viewerId: viewer.id,
+    viewer,
+    patient,
+    access,
+    capabilities: access.capabilities,
+    mode: "demo",
+    expiresAt,
+  }, env.jwtSecret, {
+    expiresIn: "1h",
   });
 
-  return { Authorization: `Bearer ${loginResponse.body.session.token}` };
+  return { Authorization: `Bearer ${token}` };
 };
 
 describe("CareCircle API", () => {
   beforeEach(() => {
     resetState();
+    vi.restoreAllMocks();
   });
 
   it("returns health information", async () => {
@@ -154,5 +195,30 @@ describe("CareCircle API", () => {
     expect(bootstrapResponse.status).toBe(200);
     expect(bootstrapResponse.body.viewerAccess.accessRole).toBe("secondary_caregiver");
     expect(bootstrapResponse.body.capabilities).not.toContain("manage_family");
+  });
+
+  it("persists care chat sessions and messages when sending an AI chat prompt", async () => {
+    const app = createServer();
+    const headers = await authHeader(app);
+    const persistSessionSpy = vi.spyOn(persistenceService, "persistChatSession");
+    const persistMessageSpy = vi.spyOn(persistenceService, "persistChatMessage");
+
+    const sessionResponse = await request(app)
+      .post("/api/care-chat/sessions")
+      .set(headers)
+      .send({ title: "Medication question" });
+
+    expect(sessionResponse.status).toBe(201);
+    expect(persistSessionSpy).toHaveBeenCalledWith(expect.objectContaining({ id: sessionResponse.body.session.id }));
+
+    const messageResponse = await request(app)
+      .post(`/api/care-chat/sessions/${sessionResponse.body.session.id}/messages`)
+      .set(headers)
+      .send({ content: "What meds are due today?" });
+
+    expect(messageResponse.status).toBe(201);
+    expect(messageResponse.body.userMessage.content).toBe("What meds are due today?");
+    expect(messageResponse.body.assistantMessage.role).toBe("assistant");
+    expect(persistMessageSpy).toHaveBeenCalledTimes(2);
   });
 });

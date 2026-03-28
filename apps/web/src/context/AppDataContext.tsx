@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { createContext, startTransition, useContext, useEffect, useMemo, useRef, useState, useCallback } from "react";
 import toast from "react-hot-toast";
 import type { AuthSession, BootstrapPayload } from "@carecircle/shared";
 import { activePatientStorageKey, apiRequest, authStorageKey } from "@/lib/api";
@@ -31,11 +31,16 @@ interface AppDataContextValue {
 
 const AppDataContext = createContext<AppDataContextValue | undefined>(undefined);
 
+const hasStoredAuthToken = () => {
+  if (typeof window === "undefined") return true;
+  return Boolean(window.localStorage.getItem(authStorageKey));
+};
+
 export const AppDataProvider = ({ children }: { children: React.ReactNode }) => {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [bootstrap, setBootstrap] = useState<BootstrapPayload | null>(null);
   const [appConfig, setAppConfig] = useState<AppRuntimeConfig>({ googleAuthEnabled: false });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => hasStoredAuthToken());
   const [error, setError] = useState<string | null>(null);
   const latestBootstrapRef = useRef<BootstrapPayload | null>(null);
 
@@ -74,60 +79,97 @@ export const AppDataProvider = ({ children }: { children: React.ReactNode }) => 
     }
   }, []);
 
+  const clearAuthState = useCallback(() => {
+    window.localStorage.removeItem(authStorageKey);
+    startTransition(() => {
+      setSession(null);
+      setBootstrap(null);
+      setError(null);
+    });
+    latestBootstrapRef.current = null;
+    window.sessionStorage.removeItem(activePatientStorageKey);
+  }, []);
+
+  const applyBootstrapPayload = useCallback((payload: BootstrapPayload, { announce = false }: { announce?: boolean } = {}) => {
+    if (announce) {
+      announceIncomingChanges(latestBootstrapRef.current, payload);
+    }
+    latestBootstrapRef.current = payload;
+    window.sessionStorage.setItem(activePatientStorageKey, payload.patient.id);
+    startTransition(() => {
+      setBootstrap(payload);
+      setAppConfig(payload.appConfig);
+      setError(null);
+    });
+  }, [announceIncomingChanges]);
+
   const loadAppState = useCallback(async ({ silent = false, announce = false }: { silent?: boolean; announce?: boolean } = {}) => {
+    const token = window.localStorage.getItem(authStorageKey);
+    if (!token) {
+      void loadPublicConfig();
+      clearAuthState();
+      setLoading(false);
+      return;
+    }
+
     if (!silent) {
       setLoading(true);
     }
-    try {
-      await loadPublicConfig();
-      const token = window.localStorage.getItem(authStorageKey);
-      if (!token) {
-        setSession(null);
-        setBootstrap(null);
-        setError(null);
-        latestBootstrapRef.current = null;
-        window.sessionStorage.removeItem(activePatientStorageKey);
-        return;
-      }
 
+    const configPromise = loadPublicConfig();
+    try {
       const sessionPayload = await apiRequest<{ session: AuthSession }>("/auth/session");
       window.localStorage.setItem(authStorageKey, sessionPayload.session.token);
-      setSession(sessionPayload.session);
+      startTransition(() => {
+        setSession(sessionPayload.session);
+      });
       const payload = await apiRequest<BootstrapPayload>("/bootstrap");
-      if (announce) {
-        announceIncomingChanges(latestBootstrapRef.current, payload);
-      }
-      latestBootstrapRef.current = payload;
-      setBootstrap(payload);
-      setAppConfig(payload.appConfig);
-      window.sessionStorage.setItem(activePatientStorageKey, payload.patient.id);
-      setError(null);
+      applyBootstrapPayload(payload, { announce });
+      await configPromise;
     } catch (nextError) {
-      window.localStorage.removeItem(authStorageKey);
-      setSession(null);
-      setBootstrap(null);
-      latestBootstrapRef.current = null;
-      window.sessionStorage.removeItem(activePatientStorageKey);
-      setError(nextError instanceof Error ? nextError.message : "Unable to load CareCircle right now.");
+      clearAuthState();
+      startTransition(() => {
+        setError(nextError instanceof Error ? nextError.message : "Unable to load CareCircle right now.");
+      });
     } finally {
       setLoading(false);
     }
-  }, [announceIncomingChanges, loadPublicConfig]);
+  }, [applyBootstrapPayload, clearAuthState, loadPublicConfig]);
+
+  const refreshBootstrap = useCallback(async ({ announce = false, recover = false }: { announce?: boolean; recover?: boolean } = {}) => {
+    const token = window.localStorage.getItem(authStorageKey);
+    if (!token) {
+      if (recover) {
+        await loadAppState({ silent: true, announce });
+        return;
+      }
+      throw new Error("Please sign in again.");
+    }
+
+    try {
+      const payload = await apiRequest<BootstrapPayload>("/bootstrap");
+      applyBootstrapPayload(payload, { announce });
+    } catch (nextError) {
+      if (recover) {
+        await loadAppState({ silent: true, announce });
+        return;
+      }
+      throw nextError;
+    }
+  }, [applyBootstrapPayload, loadAppState]);
 
   const refresh = useCallback(async () => {
-    await loadAppState();
-  }, [loadAppState]);
+    await refreshBootstrap();
+  }, [refreshBootstrap]);
 
   const finalizeAuthenticatedSession = useCallback(async (nextSession: AuthSession) => {
     window.localStorage.setItem(authStorageKey, nextSession.token);
-    setSession(nextSession);
+    startTransition(() => {
+      setSession(nextSession);
+    });
     const bootstrapPayload = await apiRequest<BootstrapPayload>("/bootstrap");
-    latestBootstrapRef.current = bootstrapPayload;
-    setBootstrap(bootstrapPayload);
-    setAppConfig(bootstrapPayload.appConfig);
-    window.sessionStorage.setItem(activePatientStorageKey, bootstrapPayload.patient.id);
-    setError(null);
-  }, []);
+    applyBootstrapPayload(bootstrapPayload);
+  }, [applyBootstrapPayload]);
 
   const login = useCallback(async (email: string, password: string) => {
     setLoading(true);
@@ -139,15 +181,15 @@ export const AppDataProvider = ({ children }: { children: React.ReactNode }) => 
       await finalizeAuthenticatedSession(payload.session);
       return payload.session;
     } catch (nextError) {
-      window.localStorage.removeItem(authStorageKey);
-      setSession(null);
-      setBootstrap(null);
-      setError(nextError instanceof Error ? nextError.message : "We could not sign you in right now.");
+      clearAuthState();
+      startTransition(() => {
+        setError(nextError instanceof Error ? nextError.message : "We could not sign you in right now.");
+      });
       throw nextError;
     } finally {
       setLoading(false);
     }
-  }, [finalizeAuthenticatedSession]);
+  }, [clearAuthState, finalizeAuthenticatedSession]);
 
   const signup = useCallback(async (input: {
     name: string;
@@ -165,15 +207,15 @@ export const AppDataProvider = ({ children }: { children: React.ReactNode }) => 
       await finalizeAuthenticatedSession(payload.session);
       return payload.session;
     } catch (nextError) {
-      window.localStorage.removeItem(authStorageKey);
-      setSession(null);
-      setBootstrap(null);
-      setError(nextError instanceof Error ? nextError.message : "We could not create your account right now.");
+      clearAuthState();
+      startTransition(() => {
+        setError(nextError instanceof Error ? nextError.message : "We could not create your account right now.");
+      });
       throw nextError;
     } finally {
       setLoading(false);
     }
-  }, [finalizeAuthenticatedSession]);
+  }, [clearAuthState, finalizeAuthenticatedSession]);
 
   const startGoogleAuth = useCallback(async (context: GoogleAuthContext) => {
     if (!appConfig.googleAuthEnabled) {
@@ -255,17 +297,15 @@ export const AppDataProvider = ({ children }: { children: React.ReactNode }) => 
       window.sessionStorage.removeItem(googleAuthContextStorageKey);
       return { session: payload.session, inviteToken: authContext?.inviteToken };
     } catch (nextError) {
-      window.localStorage.removeItem(authStorageKey);
-      setSession(null);
-      setBootstrap(null);
-      latestBootstrapRef.current = null;
-      window.sessionStorage.removeItem(activePatientStorageKey);
-      setError(nextError instanceof Error ? nextError.message : "Google sign-in could not be completed.");
+      clearAuthState();
+      startTransition(() => {
+        setError(nextError instanceof Error ? nextError.message : "Google sign-in could not be completed.");
+      });
       throw nextError;
     } finally {
       setLoading(false);
     }
-  }, [finalizeAuthenticatedSession]);
+  }, [clearAuthState, finalizeAuthenticatedSession]);
 
   const requestPasswordReset = useCallback(async (email: string) => {
     return apiRequest<{ message: string }>("/auth/password-reset/request", {
@@ -288,10 +328,12 @@ export const AppDataProvider = ({ children }: { children: React.ReactNode }) => 
     window.sessionStorage.removeItem(googleAuthContextStorageKey);
     window.sessionStorage.removeItem(activePatientStorageKey);
     window.localStorage.removeItem(authStorageKey);
-    setSession(null);
-    setBootstrap(null);
+    startTransition(() => {
+      setSession(null);
+      setBootstrap(null);
+      setError(null);
+    });
     latestBootstrapRef.current = null;
-    setError(null);
   }, []);
 
   useEffect(() => {
@@ -301,10 +343,10 @@ export const AppDataProvider = ({ children }: { children: React.ReactNode }) => 
   useEffect(() => {
     if (!session) return undefined;
     const interval = window.setInterval(() => {
-      void loadAppState({ silent: true, announce: true });
+      void refreshBootstrap({ announce: true, recover: true });
     }, 30000);
     return () => window.clearInterval(interval);
-  }, [session, loadAppState]);
+  }, [refreshBootstrap, session]);
 
   useEffect(() => {
     const settings = bootstrap?.data.settings.find((item) => item.userId === bootstrap.viewer.id);

@@ -1062,6 +1062,29 @@ export const persistenceService = {
     }
   },
 
+  async persistChatSession(record: ChatSessionRecord) {
+    await upsert("chat_sessions", {
+      id: record.id,
+      patient_id: record.patientId,
+      user_id: record.userId,
+      title: record.title,
+      created_at: record.createdAt,
+      updated_at: record.updatedAt,
+    });
+  },
+
+  async persistChatMessage(record: ChatMessageRecord) {
+    await upsert("chat_messages", {
+      id: record.id,
+      session_id: record.sessionId,
+      patient_id: record.patientId,
+      user_id: record.userId ?? null,
+      role: record.role,
+      content: record.content,
+      created_at: record.createdAt,
+    });
+  },
+
   async persistActivityEvent(record: ActivityEventRecord) {
     await upsert("activity_events", {
       id: record.id,

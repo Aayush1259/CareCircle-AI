@@ -2041,7 +2041,7 @@ export const createServer = () => {
     response.json({ sessions: state.chatSessions, messages: state.chatMessages });
   });
 
-  app.post("/api/care-chat/sessions", (request, response) => {
+  app.post("/api/care-chat/sessions", asyncHandler(async (request, response) => {
     if (!requireCapability(response, "view_dashboard", "You do not have access to CareCircle AI chat.")) return;
     const title = String(request.body?.title ?? "New Conversation");
     const session = {
@@ -2053,8 +2053,9 @@ export const createServer = () => {
       updatedAt: new Date().toISOString(),
     };
     state.chatSessions.unshift(session);
+    await persistenceService.persistChatSession(session);
     response.status(201).json({ session });
-  });
+  }));
 
   app.get("/api/care-chat/sessions/:id/messages", (request, response) => {
     if (!requireCapability(response, "view_dashboard", "You do not have access to CareCircle AI chat.")) return;
@@ -2098,6 +2099,9 @@ export const createServer = () => {
     };
     state.chatMessages.push(assistantMessage);
     session.updatedAt = new Date().toISOString();
+    await persistenceService.persistChatSession(session);
+    await persistenceService.persistChatMessage(userMessage);
+    await persistenceService.persistChatMessage(assistantMessage);
     addActivity({
       userId: getViewer().id,
       type: "message_sent",
