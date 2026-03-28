@@ -37,7 +37,7 @@ CareCircle AI exists to reduce caregiver overload. Instead of forcing a family t
 
 ### 1. Login and onboarding
 
-- Demo-safe login with `demo@carecircle.ai / Demo1234`
+- Demo-safe login with `demo@carecircle.ai / Demo1234!`
 - First-time onboarding flow
 - Loved one profile setup
 - Medication and family invite setup
@@ -324,7 +324,7 @@ The app now includes a real login gate and a demo-safe login path.
 ### Demo login
 
 - Email: `demo@carecircle.ai`
-- Password: `Demo1234`
+- Password: `Demo1234!`
 
 ### Important note
 

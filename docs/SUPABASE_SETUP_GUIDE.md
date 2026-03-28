@@ -202,7 +202,7 @@ Netlify frontend env vars should include:
 
 Run these in order:
 
-1. Sign in with `demo@carecircle.ai / Demo1234`
+1. Sign in with `demo@carecircle.ai / Demo1234!`
 2. Open the dashboard
 3. Open Documents and upload a file
 4. Open the uploaded file from the document modal

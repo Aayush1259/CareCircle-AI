@@ -264,7 +264,7 @@ describe("CareCircle API", () => {
     const app = createServer();
     const loginResponse = await request(app).post("/api/auth/login").send({
       email: "james@carecircle.ai",
-      password: "Demo1234",
+      password: "Demo1234!",
     });
 
     expect(loginResponse.status).toBe(201);

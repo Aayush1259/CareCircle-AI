@@ -10,7 +10,7 @@ import type {
   UserRecord,
   UserRole,
 } from "@carecircle/shared";
-import { buildPatientAccessRecord } from "@carecircle/shared";
+import { buildPatientAccessRecord, demoAccounts } from "@carecircle/shared";
 import { env, featureFlags } from "../env";
 import { getPatient, getState, getViewer, getViewerById, nextId, setActiveUser } from "../store";
 import { emailService } from "./email";
@@ -18,7 +18,7 @@ import { persistenceService } from "./persistence";
 import { supabaseAdmin, supabasePublic } from "./supabase";
 
 const sessionDurationMs = 1000 * 60 * 60 * 24 * 7;
-const defaultPassword = "Demo1234";
+const defaultPassword = "Demo1234!";
 const passwordResetLifetimeMs = 1000 * 60 * 60;
 
 interface TokenPayload {
@@ -87,6 +87,9 @@ const hasAccount = (email: string) => {
 const setLocalPassword = (email: string, password: string) => {
   localPasswords.set(normalizeEmail(email), password);
 };
+
+const isBuiltInDemoAccount = (email: string) =>
+  demoAccounts.some((account) => account.email.toLowerCase() === normalizeEmail(email));
 
 const resolveAccessRole = (role: UserRole): PatientAccessRole => {
   if (role === "doctor") return "doctor";
@@ -431,6 +434,8 @@ seedDemoPasswords();
 export const authService = {
   async login(email: string, password: string) {
     const normalizedEmail = normalizeEmail(email);
+    const localViewer = getState().users.find((user) => user.email.toLowerCase() === normalizedEmail);
+    const expectedLocalPassword = localPasswords.get(normalizedEmail) ?? (localViewer ? defaultPassword : null);
 
     if (featureFlags.supabaseEnabled && supabasePublic) {
       const { data, error } = await supabasePublic.auth.signInWithPassword({
@@ -466,18 +471,22 @@ export const authService = {
         return await buildSession(viewer, "supabase");
       }
 
+      if (localViewer && isBuiltInDemoAccount(normalizedEmail) && expectedLocalPassword === password) {
+        localViewer.lastLogin = new Date().toISOString();
+        await persistenceService.persistUser(localViewer);
+        return await buildSession(localViewer, "demo");
+      }
+
       throw new Error(error?.message || "The email or password looks incorrect. Please try again.");
     }
 
-    const viewer = getState().users.find((user) => user.email.toLowerCase() === normalizedEmail);
-    const expectedPassword = localPasswords.get(normalizedEmail) ?? (viewer ? defaultPassword : null);
-    if (!viewer || expectedPassword !== password) {
+    if (!localViewer || expectedLocalPassword !== password) {
       throw new Error("The email or password looks incorrect. Please try again.");
     }
 
-    viewer.lastLogin = new Date().toISOString();
-    await persistenceService.persistUser(viewer);
-    return await buildSession(viewer, "demo");
+    localViewer.lastLogin = new Date().toISOString();
+    await persistenceService.persistUser(localViewer);
+    return await buildSession(localViewer, "demo");
   },
 
   async signup(input: SignupInput) {

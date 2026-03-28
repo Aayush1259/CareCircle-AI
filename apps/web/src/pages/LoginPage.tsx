@@ -93,7 +93,7 @@ export const LoginPage = () => {
                     type="password"
                     className="pl-11"
                     value={password}
-                    placeholder="Demo1234"
+                    placeholder="Demo1234!"
                     onChange={(event) => setPassword(event.target.value)}
                   />
                 </div>

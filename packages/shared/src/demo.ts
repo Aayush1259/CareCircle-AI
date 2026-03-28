@@ -41,7 +41,7 @@ const isoDateTime = (offsetDays = 0, hour = 9, minute = 0) => {
 
 const uid = (prefix: string, index: number) => `${prefix}_${String(index).padStart(3, "0")}`;
 
-export const demoPassword = "Demo1234";
+export const demoPassword = "Demo1234!";
 
 export const demoAccounts = [
   {

@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 const login = async (page: Page) => {
   await page.goto("/login");
   await page.getByLabel("Email address").fill("demo@carecircle.ai");
-  await page.getByLabel("Password").fill("Demo1234");
+  await page.getByLabel("Password").fill("Demo1234!");
   await page.getByRole("button", { name: /open carecircle/i }).click();
   await expect(page).toHaveURL(/\/dashboard$/);
 };

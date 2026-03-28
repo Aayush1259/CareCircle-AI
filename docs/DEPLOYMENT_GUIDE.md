@@ -196,7 +196,7 @@ Those are enough for:
 After deployment, test these flows:
 
 1. Open `/login`
-2. Sign in with `demo@carecircle.ai / Demo1234`
+2. Sign in with `demo@carecircle.ai / Demo1234!`
 3. Open Dashboard and confirm demo data loads
 4. Mark a medication as taken
 5. Add a journal entry

@@ -53,7 +53,7 @@ npm run dev
 Demo login:
 
 - Email: `demo@carecircle.ai`
-- Password: `Demo1234`
+- Password: `Demo1234!`
 
 If OpenAI, SMTP, or Supabase credentials are missing, the app can still run in demo-safe fallback mode.
 
