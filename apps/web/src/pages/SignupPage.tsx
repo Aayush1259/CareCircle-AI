@@ -132,8 +132,12 @@ export const SignupPage = () => {
           initial={{ opacity: 0, scale: 1.08 }}
           animate={{ opacity: 0.34, scale: 1 }}
           transition={{ duration: 1.4 }}
-          className="absolute inset-0 z-0 bg-[url('https://images.unsplash.com/photo-1579684385127-1ef15d508118?q=80&w=2080&auto=format&fit=crop')] bg-cover bg-center"
+          className="absolute inset-0 z-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.2),transparent_34%),radial-gradient(circle_at_84%_16%,rgba(129,140,248,0.36),transparent_24%),radial-gradient(circle_at_20%_80%,rgba(45,212,191,0.16),transparent_26%),linear-gradient(145deg,#312e81_0%,#4338ca_34%,#4f46e5_54%,#1e293b_100%)]"
         />
+        <div className="absolute left-[10%] top-[16%] z-10 h-44 w-44 rounded-full border border-white/10 bg-white/8 blur-2xl" />
+        <div className="absolute right-[8%] top-[12%] z-10 h-60 w-60 rounded-full bg-brandSoft/16 blur-3xl" />
+        <div className="absolute bottom-[14%] left-[14%] z-10 h-52 w-52 rounded-[4rem] border border-white/10 bg-white/6 blur-3xl" />
+        <div className="absolute bottom-[18%] right-[16%] z-10 h-36 w-36 rounded-full bg-cyan-300/12 blur-2xl" />
         <div className="absolute inset-0 z-10 bg-[linear-gradient(145deg,rgba(99,102,241,0.38),rgba(30,41,59,0.88))]" />
 
         <div className="absolute inset-0 z-20 flex flex-col justify-between p-10 text-white xl:p-16">

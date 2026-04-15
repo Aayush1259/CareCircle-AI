@@ -43,14 +43,16 @@ export const LoginPage = () => {
   return (
     <div className="relative flex min-h-screen min-h-[100svh] w-full bg-bg">
       <div className="relative hidden w-[52%] overflow-hidden lg:block">
-        <motion.img
+        <motion.div
           initial={{ scale: 1.08, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ duration: 1.4, ease: "easeOut" }}
-          src="https://images.unsplash.com/photo-1576091160550-217359f4ecf8?q=80&w=2070&auto=format&fit=crop"
-          alt="Healthcare background"
-          className="absolute inset-0 h-full w-full object-cover"
+          className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.22),transparent_34%),radial-gradient(circle_at_78%_18%,rgba(129,140,248,0.38),transparent_26%),radial-gradient(circle_at_22%_78%,rgba(56,189,248,0.18),transparent_24%),linear-gradient(135deg,#312e81_0%,#4338ca_36%,#4f46e5_56%,#1e1b4b_100%)]"
         />
+        <div className="absolute left-[8%] top-[18%] h-40 w-40 rounded-full border border-white/12 bg-white/8 blur-2xl" />
+        <div className="absolute right-[10%] top-[14%] h-56 w-56 rounded-full bg-brandSoft/18 blur-3xl" />
+        <div className="absolute bottom-[16%] left-[18%] h-48 w-48 rounded-full bg-cyan-300/12 blur-3xl" />
+        <div className="absolute right-[12%] bottom-[14%] h-44 w-44 rounded-[4rem] border border-white/10 bg-white/6 blur-2xl" />
         <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(15,23,42,0.28),rgba(67,56,202,0.55),rgba(15,23,42,0.78))]" />
         <div className="absolute left-8 top-8 rounded-full border border-white/15 bg-white/10 px-5 py-2 text-[0.68rem] font-bold uppercase tracking-[0.28em] text-white/80 backdrop-blur-md">
           Connected Care Workspace
