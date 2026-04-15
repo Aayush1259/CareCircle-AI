@@ -292,11 +292,11 @@ export const SignupPage = () => {
                 </Field>
                 <Field label="Email address">
                   <div className="relative group">
-                    <Mail className="pointer-events-none absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 text-textSecondary transition-colors group-focus-within:text-brand" />
+                    <Mail className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-textSecondary transition-colors group-focus-within:text-brand sm:left-5" />
                     <Input
                       required
                       type="email"
-                      className={`pl-14 ${errors.email ? "border-danger ring-danger/10" : ""}`}
+                      className={`!pl-[3.35rem] sm:!pl-14 ${errors.email ? "border-danger ring-danger/10" : ""}`}
                       value={form.email}
                       placeholder="you@example.com"
                       onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
@@ -305,11 +305,11 @@ export const SignupPage = () => {
                 </Field>
                 <Field label="Password" hint="At least 8 characters">
                   <div className="relative group">
-                    <LockKeyhole className="pointer-events-none absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 text-textSecondary transition-colors group-focus-within:text-brand" />
+                    <LockKeyhole className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-textSecondary transition-colors group-focus-within:text-brand sm:left-5" />
                     <Input
                       required
                       type="password"
-                      className={`pl-14 ${errors.password ? "border-danger ring-danger/10" : ""}`}
+                      className={`!pl-[3.35rem] sm:!pl-14 ${errors.password ? "border-danger ring-danger/10" : ""}`}
                       value={form.password}
                       placeholder="••••••••"
                       onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
