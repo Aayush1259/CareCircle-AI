@@ -8,6 +8,7 @@ import {
   ChevronDown,
   ClipboardCheck,
   FileText,
+  HeartHandshake,
   HeartPulse,
   Home,
   MessageCircle,
@@ -224,37 +225,42 @@ export const AppShell = () => {
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
-          className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-brand via-brand/90 to-brandDark p-6 text-white shadow-premium"
+          className="relative overflow-hidden rounded-[2rem] border border-white/85 bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(243,246,255,0.84))] p-5 text-textPrimary shadow-premium backdrop-blur-2xl"
         >
+          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-brand via-brandLight to-brandDark/80" />
+          <div className="absolute -right-8 -top-10 h-28 w-28 rounded-full bg-brand/12 blur-3xl" />
+          <div className="absolute -left-8 bottom-0 h-24 w-24 rounded-full bg-cyan-300/10 blur-3xl" />
+
           <div className="relative z-10">
-            <div className="mb-4 flex items-center gap-2.5 text-white/82">
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[0.9rem] border border-white/14 bg-white/12 shadow-[0_14px_28px_-22px_rgba(15,23,42,0.5)] backdrop-blur-lg">
-                <Sparkles className="h-3.5 w-3.5 text-white" />
+            <div className="mb-5 flex items-center gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[1.15rem] bg-gradient-to-br from-brand via-brand to-brandDark text-white shadow-[0_18px_34px_-18px_rgba(79,70,229,0.55)] ring-1 ring-white/40">
+                <HeartHandshake className="h-5 w-5" />
               </div>
-              <p className="truncate font-['Outfit'] text-[0.66rem] font-bold uppercase tracking-[0.28em] text-white/76">
-                CareCircle AI
-              </p>
+              <div className="min-w-0">
+                <p className="truncate font-['Outfit'] text-[0.98rem] font-bold tracking-tight text-textPrimary">CareCircle AI</p>
+                <p className="mt-0.5 text-[0.62rem] font-bold uppercase tracking-[0.24em] text-textSecondary/68">
+                  Connected care workspace
+                </p>
+              </div>
             </div>
-            <h1 className="font-['Outfit'] text-[1.55rem] font-bold leading-tight tracking-tight">Calm care, <br/> every day.</h1>
-            <p className="mt-4 max-w-[14rem] text-[0.82rem] leading-6 text-white/78">
+            <h1 className="font-['Outfit'] text-[1.42rem] font-bold leading-tight tracking-tight text-textPrimary">Calm care, <br/> every day.</h1>
+            <p className="mt-3.5 max-w-[15rem] text-[0.82rem] leading-6 text-textSecondary/90">
               Medication, appointments, documents, and family coordination in one professional workspace.
             </p>
-            <div className="mt-5 inline-flex rounded-xl border border-white/10 bg-white/10 px-3.5 py-1.5 text-[0.62rem] font-bold uppercase tracking-[0.22em] text-white/90 backdrop-blur-md">
+            <div className="mt-5 inline-flex rounded-full border border-brand/10 bg-brandSoft/90 px-3.5 py-1.5 text-[0.62rem] font-bold uppercase tracking-[0.22em] text-brandDark shadow-[0_12px_24px_-20px_rgba(79,70,229,0.35)]">
               {roleTitle}
             </div>
             <div className="mt-5 grid grid-cols-2 gap-2.5">
-              <div className="rounded-2xl border border-white/10 bg-white/8 px-4 py-3 backdrop-blur-md">
-                <p className="text-[0.65rem] font-bold uppercase tracking-[0.24em] text-white/60">Unread</p>
-                <p className="mt-2 font-['Outfit'] text-xl font-bold">{unreadCount}</p>
+              <div className="rounded-[1.35rem] border border-white/85 bg-white/82 px-4 py-3 shadow-[0_16px_30px_-24px_rgba(15,23,42,0.28)]">
+                <p className="text-[0.62rem] font-bold uppercase tracking-[0.22em] text-textSecondary/62">Unread</p>
+                <p className="mt-2 font-['Outfit'] text-[1.15rem] font-bold text-textPrimary">{unreadCount}</p>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-white/8 px-4 py-3 backdrop-blur-md">
-                <p className="text-[0.65rem] font-bold uppercase tracking-[0.24em] text-white/60">Insights</p>
-                <p className="mt-2 font-['Outfit'] text-xl font-bold">{activeInsights.length}</p>
+              <div className="rounded-[1.35rem] border border-white/85 bg-white/82 px-4 py-3 shadow-[0_16px_30px_-24px_rgba(15,23,42,0.28)]">
+                <p className="text-[0.62rem] font-bold uppercase tracking-[0.22em] text-textSecondary/62">Insights</p>
+                <p className="mt-2 font-['Outfit'] text-[1.15rem] font-bold text-textPrimary">{activeInsights.length}</p>
               </div>
             </div>
           </div>
-          <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-white/10 blur-3xl" />
-          <div className="absolute -left-4 -bottom-4 h-24 w-24 rounded-full bg-brandDark/20 blur-2xl" />
         </motion.div>
 
         <nav aria-label="Primary navigation" className="mt-8 flex-1 space-y-1">
