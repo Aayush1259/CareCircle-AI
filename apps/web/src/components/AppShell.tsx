@@ -227,15 +227,13 @@ export const AppShell = () => {
           className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-brand via-brand/90 to-brandDark p-6 text-white shadow-premium"
         >
           <div className="relative z-10">
-            <div className="mb-5">
-              <div className="inline-flex max-w-full items-center gap-2.5 rounded-full border border-white/16 bg-[linear-gradient(180deg,rgba(255,255,255,0.18),rgba(255,255,255,0.08))] px-3.5 py-2 shadow-[0_18px_34px_-24px_rgba(15,23,42,0.52)] backdrop-blur-xl">
-                <div className="flex h-7 w-7 items-center justify-center rounded-full border border-white/18 bg-white/16 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)]">
-                  <Sparkles className="h-3.5 w-3.5 text-white" />
-                </div>
-                <p className="truncate font-['Outfit'] text-[0.68rem] font-bold uppercase tracking-[0.3em] text-white/88">
-                  CareCircle AI
-                </p>
+            <div className="mb-4 flex items-center gap-2.5 text-white/82">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[0.9rem] border border-white/14 bg-white/12 shadow-[0_14px_28px_-22px_rgba(15,23,42,0.5)] backdrop-blur-lg">
+                <Sparkles className="h-3.5 w-3.5 text-white" />
               </div>
+              <p className="truncate font-['Outfit'] text-[0.66rem] font-bold uppercase tracking-[0.28em] text-white/76">
+                CareCircle AI
+              </p>
             </div>
             <h1 className="font-['Outfit'] text-[1.55rem] font-bold leading-tight tracking-tight">Calm care, <br/> every day.</h1>
             <p className="mt-4 max-w-[14rem] text-[0.82rem] leading-6 text-white/78">
