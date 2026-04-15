@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertCircle, BellRing, CheckCircle2, Lock, Phone, Sparkles, TrendingUp, XCircle } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
 import type { MedicationLogRecord, MedicationLogStatus, MedicationRecord, TimeOfDay } from "@carecircle/shared";
 import { BarChart, DoughnutChart } from "@/components/charts";
@@ -10,6 +11,12 @@ import { resolveViewerRole } from "@/lib/roles";
 import { hasText, trimmedText } from "@/lib/validation";
 
 const tabs = ["Today's Schedule", "All Medications", "Interaction Checker", "Refill Tracker"] as const;
+const mobileTabLabels: Record<(typeof tabs)[number], string> = {
+  "Today's Schedule": "Today",
+  "All Medications": "All meds",
+  "Interaction Checker": "Check",
+  "Refill Tracker": "Refills",
+};
 const scheduleSections = ["morning", "afternoon", "evening", "bedtime"] as const;
 const scheduleLabels: Record<(typeof scheduleSections)[number], string> = {
   morning: "Morning",
@@ -242,41 +249,7 @@ export const MedicationsPage = () => {
     setModalOpen(true);
   };
 
-  const handleSave = async () => {
-    const name = trimmedText(form.name);
-    const doseAmount = trimmedText(form.doseAmount);
-    if (!hasText(name) || !hasText(doseAmount)) {
-      toast.error("Please enter a medication name and dose before saving.");
-      return;
-    }
-    setSaveBusy(true);
-    try {
-      await request(editingMedicationId ? `/medications/${editingMedicationId}` : "/medications", {
-        method: editingMedicationId ? "PATCH" : "POST",
-        body: JSON.stringify({
-          ...form,
-          name,
-          doseAmount,
-          purpose: trimmedText(form.purpose),
-          instructions: trimmedText(form.instructions),
-          refillDate: trimmedText(form.refillDate),
-          pharmacyName: trimmedText(form.pharmacyName),
-          pharmacyPhone: trimmedText(form.pharmacyPhone),
-          timesOfDay: timesOfDayForFrequency(form.frequency),
-        }),
-      });
-      toast.success(editingMedicationId ? "Medication updated." : "Medication saved.");
-      closeModal();
-      await refresh();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Please try again.");
-    } finally {
-      setSaveBusy(false);
-    }
-  };
-
-  const logDose = async (slot: { id: string; medication: MedicationRecord; scheduledTime: string; status: DoseSlotStatus }, status: MedicationLogStatus) => {
-    if (slot.status === status) return;
+  const logDose = async (slot: (typeof todaySlots)[number], status: MedicationLogStatus) => {
     setLoggingSlotKey(slot.id);
     try {
       await request(`/medications/${slot.medication.id}/log`, {
@@ -361,589 +334,381 @@ export const MedicationsPage = () => {
     }
   };
 
+  const handleSave = async () => {
+    const name = trimmedText(form.name);
+    const doseAmount = trimmedText(form.doseAmount);
+    if (!hasText(name) || !hasText(doseAmount)) {
+      toast.error("Please enter a medication name and dose before saving.");
+      return;
+    }
+    setSaveBusy(true);
+    try {
+      if (editingMedicationId) {
+        await request(`/medications/${editingMedicationId}`, {
+          method: "PATCH",
+          body: JSON.stringify({ ...form, name, doseAmount }),
+        });
+        toast.success("Medication updated.");
+      } else {
+        await request("/medications", {
+          method: "POST",
+          body: JSON.stringify({ ...form, name, doseAmount, startDate: today }),
+        });
+        toast.success("Medication added to the plan.");
+      }
+      closeModal();
+      await refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setSaveBusy(false);
+    }
+  };
+
   return (
-    <div className="space-y-6">
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,1.2fr)]">
-        <Card className="relative overflow-hidden">
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-r from-brandSoft/90 via-emerald-50 to-white" />
-          <SectionHeader title="Today's adherence" description="A calmer view of what is done, what is late, and what still needs attention." />
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,280px)_minmax(0,1fr)]">
-            <div className="relative mx-auto h-[280px] w-full max-w-[280px]">
-              <DoughnutChart
-                data={{
-                  labels: todayAdherence.total ? ["Taken", "Missed", "Remaining"] : ["No doses scheduled"],
-                  datasets: [
-                    {
-                      data: todayAdherence.total
-                        ? [todayAdherence.taken, todayAdherence.missed, todayAdherence.remaining]
-                        : [1],
-                      backgroundColor: todayAdherence.total ? ["#0d9488", "#ef4444", "#d1fae5"] : ["#e2e8f0"],
-                      borderWidth: 0,
-                    },
-                  ],
-                }}
-                options={{
-                  maintainAspectRatio: false,
-                  cutout: "72%",
-                  plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                      displayColors: false,
-                      backgroundColor: "#0f172a",
-                      padding: 12,
-                    },
-                  },
-                }}
-              />
-              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                <Badge tone={adherenceTone(todayAdherence.score)}>{adherenceCopy(todayAdherence.score)}</Badge>
-                <p className="mt-4 text-5xl font-black tracking-tight text-textPrimary">{todayAdherence.score}%</p>
-                <p className="mt-1 text-sm font-semibold text-textSecondary">
-                  {todayAdherence.taken} of {todayAdherence.total} doses logged
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="space-y-5 sm:space-y-7 lg:space-y-10"
+    >
+      <div className="grid gap-3.5 sm:gap-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+        <Card className="relative overflow-hidden rounded-[1.65rem] border-none bg-gradient-to-br from-brand/90 via-brandDark to-brand/80 px-4 py-4 text-white shadow-premium sm:rounded-[2.2rem] sm:px-5 sm:py-5 lg:px-6 lg:py-6">
+          <div className="relative z-10">
+            <p className="font-['Outfit'] text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-white/82 sm:text-[0.74rem]">Today's Adherence</p>
+            <div className="mt-4 grid gap-4 sm:mt-5 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center sm:gap-5">
+              <div className="relative flex h-20 w-20 items-center justify-center self-start sm:h-24 sm:w-24 lg:h-28 lg:w-28">
+                <DoughnutChart
+                  data={{
+                    labels: todayAdherence.total ? ["Taken", "Missed", "Remaining"] : ["No doses scheduled"],
+                    datasets: [
+                      {
+                        data: todayAdherence.total
+                          ? [todayAdherence.taken, todayAdherence.missed, todayAdherence.remaining]
+                          : [1],
+                        backgroundColor: todayAdherence.total ? ["#ffffff", "rgba(255,255,255,0.2)", "rgba(255,255,255,0.1)"] : ["rgba(255,255,255,0.1)"],
+                        borderWidth: 0,
+                      },
+                    ],
+                  }}
+                  options={{
+                    maintainAspectRatio: false,
+                    cutout: "78%",
+                    plugins: { legend: { display: false }, tooltip: { enabled: false } },
+                  }}
+                />
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <p className="text-[1.55rem] font-['Outfit'] font-bold sm:text-[1.8rem] lg:text-3xl">{todayAdherence.score}%</p>
+                </div>
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="font-['Outfit'] text-[1.45rem] font-bold tracking-tight sm:text-[1.8rem] lg:text-[2.2rem]">{adherenceCopy(todayAdherence.score)}</h2>
+                  <Badge className="border-white/30 bg-white/20 text-white backdrop-blur-md">{todayAdherence.taken}/{todayAdherence.total} doses</Badge>
+                </div>
+                <p className="mt-2.5 max-w-lg text-[0.92rem] leading-6 text-white/82 font-['Inter'] sm:mt-3 sm:text-[0.98rem] sm:leading-7">
+                  {todayAdherence.score >= 90
+                    ? "Ellie is maintaining a near-perfect routine today. Consistency is key for stability."
+                    : todayAdherence.score >= 70
+                      ? "A productive day for care. Just a few final checks to maintain the trend."
+                      : "We're seeing a few missed doses. A gentle reminder or check-in might be helpful."}
                 </p>
               </div>
             </div>
 
-            <div className="space-y-4">
-              <div className="grid gap-3 sm:grid-cols-3">
-                {[
-                  { label: "Taken", value: todayAdherence.taken, tone: "success" as const, helper: "Completed today" },
-                  { label: "Remaining", value: todayAdherence.remaining, tone: "warning" as const, helper: "Still open" },
-                  { label: "Missed", value: todayAdherence.missed, tone: "danger" as const, helper: "Needs follow-up" },
-                ].map((item) => (
-                  <div key={item.label} className="rounded-[28px] border border-borderColor/70 bg-white/90 p-4 shadow-sm">
-                    <Badge tone={item.tone}>{item.label}</Badge>
-                    <p className="mt-4 text-3xl font-black text-textPrimary">{item.value}</p>
-                    <p className="mt-1 text-sm text-textSecondary">{item.helper}</p>
-                  </div>
-                ))}
-              </div>
-
-              <div className="rounded-[28px] border border-borderColor/70 bg-slate-50/80 p-5">
-                <div className="flex items-start gap-3">
-                  {scoreDelta >= 0 ? (
-                    <TrendingUp className="mt-1 h-5 w-5 text-emerald-700" />
-                  ) : (
-                    <AlertCircle className="mt-1 h-5 w-5 text-amber-700" />
-                  )}
-                  <div>
-                    <p className="font-semibold text-textPrimary">
-                      {scoreDelta >= 0 ? `Up ${Math.abs(scoreDelta)} points from yesterday` : `Down ${Math.abs(scoreDelta)} points from yesterday`}
-                    </p>
-                    <p className="mt-1 text-sm text-textSecondary">
-                      {nextPendingDose
-                        ? `Next dose window: ${nextPendingDose.medication.name} at ${formatScheduledTime(nextPendingDose.scheduledTime)}.`
-                        : "Every scheduled dose has a status for today."}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-3">
-                {[
-                  {
-                    label: "Reminder time",
-                    value: bootstrap.viewer.notificationPreferences.medicationReminderTime,
-                    helper: bootstrap.viewer.notificationPreferences.medicationReminders ? "Reminders enabled" : "Reminders are off",
-                  },
-                  { label: "Active meds", value: String(activeMedications.length), helper: "Currently on the plan" },
-                  {
-                    label: "Today",
-                    value: todayAdherence.total ? `${todayAdherence.total} doses` : "Nothing due",
-                    helper: "Scheduled windows",
-                  },
-                ].map((item) => (
-                  <div key={item.label} className="rounded-[24px] bg-brandSoft/45 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brandDark/75">{item.label}</p>
-                    <p className="mt-2 text-lg font-bold text-textPrimary">{item.value}</p>
-                    <p className="mt-1 text-sm text-textSecondary">{item.helper}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="relative overflow-hidden">
-          <div className="pointer-events-none absolute right-0 top-0 h-28 w-40 rounded-full bg-brandSoft/60 blur-3xl" />
-          <SectionHeader
-            title="Weekly adherence"
-            description={
-              viewerRole === "family_member"
-                ? "Recent logged doses in a cleaner weekly view."
-                : "A seven-day view that makes the trend easy to scan."
-            }
-            action={canManageMedications ? <Button onClick={openCreateModal}>Add medication</Button> : undefined}
-          />
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_220px]">
-            <div className="h-[300px] rounded-[28px] border border-borderColor/70 bg-white/90 p-4">
-              <BarChart
-                data={{
-                  labels: weeklySeries.map((item) => item.label),
-                  datasets: [
-                    {
-                      label: "Adherence",
-                      data: weeklySeries.map((item) => item.score),
-                      borderRadius: 18,
-                      backgroundColor: weeklySeries.map((item) =>
-                        item.score >= 85 ? "#0d9488" : item.score >= 60 ? "#f59e0b" : "#f97316",
-                      ),
-                      maxBarThickness: 34,
-                    },
-                  ],
-                }}
-                options={{
-                  maintainAspectRatio: false,
-                  scales: {
-                    x: {
-                      grid: { display: false },
-                      ticks: { color: "#64748b", font: { weight: 700 } },
-                    },
-                    y: {
-                      beginAtZero: true,
-                      max: 100,
-                      ticks: {
-                        stepSize: 20,
-                        color: "#64748b",
-                        callback: (value) => `${value}%`,
-                      },
-                      grid: {
-                        color: "rgba(148, 163, 184, 0.2)",
-                      },
-                    },
-                  },
-                  plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                      displayColors: false,
-                      backgroundColor: "#0f172a",
-                      padding: 12,
-                      callbacks: {
-                        title: (items) => {
-                          const item = weeklySeries[items[0]?.dataIndex ?? 0];
-                          return item ? `${item.label} | ${item.dateLabel}` : "Adherence";
-                        },
-                        label: (item) => `${weeklySeries[item.dataIndex].score}% adherence`,
-                        afterLabel: (item) => {
-                          const day = weeklySeries[item.dataIndex];
-                          return `Taken ${day.taken}/${day.total || 0} logged doses`;
-                        },
-                      },
-                    },
-                  },
-                }}
-              />
-            </div>
-
-            <div className="grid gap-3">
+            <div className="mt-5 grid grid-cols-3 gap-2.5 sm:mt-6 sm:gap-3">
               {[
-                { label: "Weekly average", value: `${weeklyAverage}%`, helper: "Across the last 7 days" },
-                { label: "Best day", value: `${bestDay.label} ${bestDay.score}%`, helper: bestDay.dateLabel || "No recent logs" },
-                { label: "Steady days", value: `${steadyDays}/7`, helper: "Days at 80% or higher" },
+                { label: "Status", value: scoreDelta >= 0 ? `+${scoreDelta}%` : `${scoreDelta}%`, helper: "vs Yesterday" },
+                { label: "Steady Days", value: String(steadyDays), helper: "This week" },
+                { label: "Active Plan", value: String(activeMedications.length), helper: "Medications" },
               ].map((item) => (
-                <div key={item.label} className="rounded-[24px] border border-borderColor/70 bg-white/90 p-4 shadow-sm">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-textSecondary">{item.label}</p>
-                  <p className="mt-2 text-2xl font-black text-textPrimary">{item.value}</p>
-                  <p className="mt-1 text-sm text-textSecondary">{item.helper}</p>
+                <div key={item.label} className="rounded-[1.05rem] border border-white/10 bg-white/10 px-3 py-3 backdrop-blur-md sm:rounded-[1.25rem] sm:px-4 sm:py-4">
+                  <p className="text-[0.58rem] font-semibold uppercase tracking-[0.14em] text-white/60 sm:text-[0.68rem] sm:tracking-[0.18em]">{item.label}</p>
+                  <p className="mt-1.5 text-lg font-bold font-['Outfit'] sm:mt-2 sm:text-xl">{item.value}</p>
+                  <p className="mt-0.5 text-[0.68rem] text-white/45 sm:mt-1 sm:text-[0.72rem]">{item.helper}</p>
                 </div>
               ))}
             </div>
           </div>
+          <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
+          <div className="absolute -bottom-20 -left-20 h-56 w-56 rounded-full bg-brandSoft/20 blur-3xl opacity-50" />
         </Card>
-      </div>
 
-      {viewerRole === "family_member" ? (
-        <Card className="border-amber-200 bg-amber-50">
-          <div className="flex items-start gap-3">
-            <Lock className="mt-1 h-5 w-5 text-amber-700" />
-            <div>
-              <p className="font-semibold text-amber-900">Family medication access is intentionally limited.</p>
-              <p className="mt-1 text-sm text-amber-900/80">
-                You can follow the daily schedule{canLogMedications ? " and log doses you were invited to help with" : ""}, but refill details,
-                medication purpose, and interaction analysis stay with caregivers and clinicians.
-              </p>
+        <Card className="flex flex-col justify-between rounded-[1.65rem] border-white/20 bg-white/40 p-4 shadow-calm backdrop-blur-xl sm:rounded-[2.2rem] sm:p-6">
+          <div className="flex items-center justify-between">
+            <SectionHeader
+              title="Next Dose"
+              className="p-0 border-none mb-0"
+              titleClassName="font-['Outfit'] text-[1.15rem] sm:text-xl"
+            />
+            <div className="flex h-9 w-9 items-center justify-center rounded-[0.9rem] border border-brand/20 bg-brandSoft/30 text-brand sm:h-11 sm:w-11 sm:rounded-[1.1rem]">
+              <BellRing className="h-4.5 w-4.5 sm:h-5 sm:w-5" />
+            </div>
+          </div>
+          <div className="mt-3.5 sm:mt-5">
+            <p className="text-[0.66rem] font-semibold uppercase tracking-[0.14em] text-textSecondary sm:text-[0.72rem] sm:tracking-[0.18em]">
+              {nextPendingDose ? `Due at ${formatScheduledTime(nextPendingDose.scheduledTime)}` : "No doses left today"}
+            </p>
+            <p className="mt-2.5 font-['Outfit'] text-[1.2rem] font-bold text-textPrimary sm:text-[1.55rem] lg:text-3xl">
+              {nextPendingDose
+                ? `${nextPendingDose.medication.name} ${nextPendingDose.medication.doseAmount}${nextPendingDose.medication.doseUnit}`
+                : "All caught up"}
+            </p>
+            <p className="mt-2 text-[0.88rem] leading-6 font-medium text-textSecondary sm:text-[0.98rem]">
+              {nextPendingDose
+                ? nextPendingDose.medication.instructions || nextPendingDose.medication.purpose || "Ready to log the next dose."
+                : "Every scheduled dose has already been handled for today."}
+            </p>
+          </div>
+          <div className="mt-5 sm:mt-6">
+            <div className="grid gap-3">
+              <Button
+                className="w-full rounded-[1.1rem] py-3.5 text-[0.92rem] shadow-brand shadow-lg sm:rounded-[1.25rem] sm:py-4 sm:text-base"
+                onClick={() => nextPendingDose && void logDose(nextPendingDose, "taken")}
+                disabled={!nextPendingDose || !canLogMedications || loggingSlotKey === nextPendingDose.id}
+              >
+                {nextPendingDose ? "I've taken this" : "No action needed"}
+              </Button>
+              {canManageMedications ? (
+                <Button variant="ghost" className="w-full rounded-[1.1rem] sm:rounded-[1.25rem]" onClick={openCreateModal}>
+                  Add medication
+                </Button>
+              ) : null}
             </div>
           </div>
         </Card>
-      ) : null}
-
-      <div className="rounded-full border border-borderColor bg-white p-1 shadow-sm">
-        <div className={availableTabs.length <= 2 ? "flex flex-wrap gap-2" : "flex snap-x gap-2 overflow-x-auto scrollbar-thin"}>
-          {availableTabs.map((item) => (
-            <button
-              key={item}
-              type="button"
-              onClick={() => setTab(item)}
-              className={`shrink-0 snap-start whitespace-nowrap rounded-full px-4 py-2.5 text-sm font-semibold transition ${
-                tab === item ? "bg-brand text-white shadow-calm" : "text-textSecondary hover:bg-slate-50"
-              }`}
-            >
-              {item}
-            </button>
-          ))}
-        </div>
       </div>
 
-      {tab === "Today's Schedule" ? (
-        <Card>
-          <SectionHeader title="Today's schedule" description="Log each dose window directly, without losing track of what is still pending." />
-          <div className="space-y-4">
-            {todaySlots.length === 0 ? (
-              <EmptyState
-                title="No doses scheduled today"
-                description="Once medications are added, each dose window will appear here with quick logging buttons."
+      <div className="flex snap-x gap-2.5 overflow-x-auto pb-3 scrollbar-none sm:gap-4 sm:pb-4">
+        {availableTabs.map((item) => (
+          <button
+            key={item}
+            type="button"
+            onClick={() => setTab(item)}
+            className={`shrink-0 snap-start whitespace-nowrap rounded-[1.15rem] border px-4 py-3 text-[0.76rem] font-bold transition-all duration-300 sm:rounded-2xl sm:px-8 sm:py-4 sm:text-sm ${
+              tab === item
+                ? "border-brand bg-brand text-white shadow-brand shadow-lg sm:scale-105"
+                : "border-borderColor/50 bg-white text-textSecondary hover:bg-slate-50"
+            }`}
+          >
+            <span className="sm:hidden">{mobileTabLabels[item]}</span>
+            <span className="hidden sm:inline">{item}</span>
+          </button>
+        ))}
+      </div>
+
+      <AnimatePresence mode="wait">
+        {tab === "Today's Schedule" && (
+          <motion.div
+            key="schedule"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            className="space-y-6"
+          >
+            <Card className="rounded-[2rem] p-5 sm:rounded-[2.5rem] sm:p-8">
+              <SectionHeader
+                title="Today's Schedule"
+                titleClassName="responsive-title-lg"
+                description="Manage each dose window precisely as the day unfolds."
               />
-            ) : (
-              scheduleSections
-                .map((section) => ({
-                  section,
-                  slots: todaySlots.filter((slot) => slot.timeOfDay === section),
-                }))
-                .filter((group) => group.slots.length > 0)
-                .map(({ section, slots }) => (
-                  <div key={section} className="rounded-[30px] border border-borderColor/70 bg-slate-50/70 p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-textSecondary">{scheduleLabels[section]}</p>
-                        <p className="mt-1 text-sm text-textSecondary">
-                          {slots.length} scheduled dose{slots.length === 1 ? "" : "s"}
-                        </p>
-                      </div>
-                      <Badge tone={slots.every((slot) => slot.status === "taken") ? "success" : "warning"}>
-                        {slots.filter((slot) => slot.status === "taken").length}/{slots.length} done
-                      </Badge>
-                    </div>
 
-                    <div className="mt-4 space-y-3">
-                      {slots.map((slot) => {
-                        const isLogging = loggingSlotKey === slot.id;
-                        return (
-                          <div key={slot.id} className="rounded-[26px] border border-borderColor/70 bg-white p-4 shadow-sm">
-                            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                              <div className="min-w-0">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <p className="text-lg font-bold text-textPrimary">{slot.medication.name}</p>
-                                  <Badge tone={doseStatusTone(slot.status)}>{doseStatusLabel(slot.status)}</Badge>
-                                </div>
-                                <p className="mt-2 text-sm text-textSecondary">
-                                  {slot.medication.doseAmount}
-                                  {slot.medication.doseUnit} | {formatScheduledTime(slot.scheduledTime)}
-                                </p>
-                                <p className="mt-2 text-sm text-textSecondary">
-                                  {canSeeMedicationDetails
-                                    ? slot.medication.instructions || slot.medication.purpose || "No extra instructions saved."
-                                    : "Dose details are simplified in family view."}
-                                </p>
-                                {slot.log ? (
-                                  <p className="mt-3 text-xs font-semibold uppercase tracking-[0.16em] text-textSecondary">
-                                    Logged by the care team {slot.log.takenAt ? `at ${formatScheduledTime(slot.log.takenAt)}` : "for follow-up"}
-                                  </p>
-                                ) : null}
-                              </div>
-
-                              <div className="flex flex-wrap gap-2">
-                                {canLogMedications ? (
-                                  <>
-                                    <Button
-                                      variant={slot.status === "taken" ? "primary" : "secondary"}
-                                      onClick={() => void logDose(slot, "taken")}
-                                      disabled={isLogging || slot.status === "taken"}
-                                    >
-                                      <CheckCircle2 className="h-4 w-4" />
-                                      {slot.status === "taken" ? "Taken" : isLogging ? "Saving..." : "Mark taken"}
-                                    </Button>
-                                    <Button
-                                      variant={slot.status === "missed" ? "danger" : "ghost"}
-                                      onClick={() => void logDose(slot, "missed")}
-                                      disabled={isLogging || slot.status === "missed"}
-                                    >
-                                      <XCircle className="h-4 w-4" />
-                                      {slot.status === "missed" ? "Missed" : isLogging ? "Saving..." : "Mark missed"}
-                                    </Button>
-                                  </>
-                                ) : viewerRole === "family_member" ? (
-                                  <Button variant="ghost" disabled title="Ask the primary caregiver to enable medication logging for this account.">
-                                    <Lock className="h-4 w-4" />
-                                    Schedule only
-                                  </Button>
-                                ) : null}
-                              </div>
-                            </div>
+              <div className="mt-6 space-y-8 sm:mt-8 sm:space-y-12">
+                {todaySlots.length === 0 ? (
+                  <EmptyState
+                    title="No doses scheduled today"
+                    description="Once medications are added, each dose window will appear here with quick logging buttons."
+                  />
+                ) : (
+                  scheduleSections
+                    .map((section) => ({
+                      section,
+                      slots: todaySlots.filter((slot) => slot.timeOfDay === section),
+                    }))
+                    .filter((group) => group.slots.length > 0)
+                    .map(({ section, slots }) => (
+                      <div key={section} className="relative">
+                        <div className="sticky top-0 z-20 mb-5 flex items-center justify-between bg-white/80 py-2 backdrop-blur-md sm:mb-6">
+                          <div className="flex items-center gap-3 sm:gap-4">
+                            <h3 className="font-['Outfit'] text-xl font-bold text-textPrimary sm:text-2xl">{scheduleLabels[section]}</h3>
+                            <Badge tone="neutral" className="bg-slate-100">{slots.length} items</Badge>
                           </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))
-            )}
-          </div>
-        </Card>
-      ) : null}
+                          <span className="text-[0.7rem] font-bold uppercase tracking-[0.16em] text-textSecondary sm:text-sm sm:tracking-widest">{section === 'morning' ? '8:00 AM' : section === 'afternoon' ? '1:00 PM' : section === 'evening' ? '6:00 PM' : '9:00 PM'}</span>
+                        </div>
 
-      {tab === "All Medications" ? (
-        <Card>
-          <SectionHeader
-            title="All medications"
-            description={
-              canSeeMedicationDetails
-                ? "Purpose, refill timing, and the details that keep errors down."
-                : "Family view shows the schedule and dose only. Clinical and pharmacy details stay hidden."
-            }
-            action={
-              <Select value={filter} onChange={(event) => setFilter(event.target.value)} className="w-full sm:w-[180px]">
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-                <option value="all">All</option>
-              </Select>
-            }
-          />
-          <div className="space-y-4">
-            {visibleMedications.length === 0 ? (
-              <EmptyState
-                title="No medications in this filter"
-                description="Switch filters or add a medication to start building the care plan."
-              />
-            ) : visibleMedications.map((medication) => {
-              const daysRemaining = Math.ceil((new Date(medication.refillDate).getTime() - Date.now()) / 86400000);
-              const actionBusy = updatingMedicationId === medication.id;
-              return (
-                <div key={medication.id} className="rounded-[30px] border border-borderColor/70 bg-white p-5 shadow-sm">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-lg font-bold text-textPrimary">
-                          {medication.name} {medication.doseAmount}
-                          {medication.doseUnit}
-                        </p>
-                        <Badge tone={medication.isActive ? "brand" : "neutral"}>
-                          {medication.isActive ? "Active" : "Inactive"}
-                        </Badge>
-                        <Badge tone={refillTone(daysRemaining)}>
-                          {daysRemaining <= 0 ? "Refill overdue" : `Refill in ${daysRemaining} day${daysRemaining === 1 ? "" : "s"}`}
-                        </Badge>
+                        <div className="grid gap-4">
+                          {slots.map((slot, index) => {
+                            const isLogging = loggingSlotKey === slot.id;
+                            return (
+                              <motion.div
+                                key={slot.id}
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: index * 0.05 }}
+                                className="group flex flex-col gap-4 rounded-[1.3rem] border border-borderColor bg-white p-4 transition-all duration-300 hover:border-brand hover:shadow-premium sm:flex-row sm:items-center sm:gap-6 sm:rounded-[1.5rem] sm:p-6"
+                              >
+                                <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-[1.1rem] transition-colors sm:h-16 sm:w-16 sm:rounded-[1.25rem] ${
+                                  slot.status === 'taken' ? 'bg-success/10 text-success' :
+                                  slot.status === 'missed' ? 'bg-danger/10 text-danger' : 'bg-brandSoft text-brand'
+                                }`}>
+                                  {slot.status === 'taken' ? <CheckCircle2 className="h-7 w-7 sm:h-8 sm:w-8" /> :
+                                   slot.status === 'missed' ? <XCircle className="h-7 w-7 sm:h-8 sm:w-8" /> : <AlertCircle className="h-7 w-7 sm:h-8 sm:w-8" />}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <p className="font-['Outfit'] text-lg font-bold text-textPrimary sm:text-xl">{slot.medication.name}</p>
+                                    <Badge tone={doseStatusTone(slot.status)}>{doseStatusLabel(slot.status)}</Badge>
+                                  </div>
+                                  <p className="mt-1 text-sm font-medium text-textSecondary sm:text-base">
+                                    {slot.medication.doseAmount}{slot.medication.doseUnit} | {formatScheduledTime(slot.scheduledTime)}
+                                  </p>
+                                  <p className="mt-2 text-sm text-textSecondary max-w-md">
+                                    {canSeeMedicationDetails
+                                      ? slot.medication.instructions || slot.medication.purpose || "Regular dose."
+                                      : "Dose details are restricted in family view."}
+                                  </p>
+                                </div>
+                                <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row">
+                                  {canLogMedications ? (
+                                    <>
+                                      <Button
+                                        variant={slot.status === "taken" ? "primary" : "secondary"}
+                                        onClick={() => void logDose(slot, "taken")}
+                                        disabled={isLogging || slot.status === "taken"}
+                                        className="w-full rounded-[1rem] px-5 sm:w-auto sm:rounded-xl sm:px-6"
+                                      >
+                                        {slot.status === "taken" ? "Done" : "Take"}
+                                      </Button>
+                                      {slot.status === "pending" && (
+                                        <Button
+                                          variant="ghost"
+                                          onClick={() => void logDose(slot, "missed")}
+                                          disabled={isLogging}
+                                          className="w-full rounded-[1rem] border border-slate-100 sm:w-auto sm:rounded-xl"
+                                        >
+                                          Miss
+                                        </Button>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <Badge tone="neutral" className="px-4 py-2">View Only</Badge>
+                                  )}
+                                </div>
+                              </motion.div>
+                            );
+                          })}
+                        </div>
                       </div>
-                      {canSeeMedicationDetails ? (
-                        <>
-                          <p className="mt-2 text-sm text-textSecondary">{medication.purpose || "No purpose saved yet."}</p>
-                          <p className="mt-3 text-sm text-textSecondary">{medication.instructions || "No instructions saved yet."}</p>
-                        </>
-                      ) : (
-                        <p className="mt-2 text-sm text-textSecondary">Caregiver-managed medication details are hidden in family view.</p>
-                      )}
-                    </div>
+                    ))
+                )}
+              </div>
+            </Card>
+          </motion.div>
+        )}
 
-                    {canSeeMedicationDetails ? (
-                      <div className="space-y-3 lg:min-w-[230px]">
-                        <div className="rounded-[24px] bg-slate-50 p-4">
-                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-textSecondary">Refill date</p>
-                          <p className="mt-2 text-lg font-bold text-textPrimary">{formatDate(medication.refillDate)}</p>
-                          <div className="mt-3">
-                            <ProgressBar value={refillProgress(daysRemaining)} />
+        {tab === "All Medications" && (
+          <motion.div
+            key="all-meds"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            className="space-y-6"
+          >
+            <Card className="rounded-[2rem] p-5 sm:rounded-[2.5rem] sm:p-8">
+              <SectionHeader
+                title="Active Medications"
+                titleClassName="responsive-title-lg"
+                description="The complete baseline for current care."
+                action={
+                  <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
+                    <Select value={filter} onChange={(event) => setFilter(event.target.value)} className="h-11 w-full rounded-xl sm:w-[160px]">
+                      <option value="active">Active Plan</option>
+                      <option value="inactive">Previous</option>
+                      <option value="all">Everything</option>
+                    </Select>
+                    {canManageMedications && <Button onClick={openCreateModal} className="w-full rounded-xl px-6 sm:w-auto">Add medication</Button>}
+                  </div>
+                }
+              />
+              <div className="mt-6 grid gap-4 sm:mt-8">
+                {visibleMedications.map((medication, index) => {
+                  const daysRemaining = Math.ceil((new Date(medication.refillDate).getTime() - Date.now()) / 86400000);
+                  return (
+                    <motion.div
+                      key={medication.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.05 }}
+                      className="rounded-[1.5rem] border border-borderColor bg-white p-5 shadow-sm transition-shadow hover:shadow-md sm:rounded-[2rem] sm:p-6"
+                    >
+                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-['Outfit'] text-xl font-bold text-textPrimary sm:text-2xl">{medication.name}</p>
+                            <Badge tone={medication.isActive ? "brand" : "neutral"}>{medication.isActive ? "Active" : "Paused"}</Badge>
+                            <Badge tone={refillTone(daysRemaining)}>
+                              {daysRemaining <= 0 ? "Refill Overdue" : `Refill in ${daysRemaining}d`}
+                            </Badge>
+                          </div>
+                          <p className="mt-2 text-base font-medium text-textSecondary sm:text-lg">{medication.doseAmount}{medication.doseUnit} | {medication.frequency.replace('_', ' ')}</p>
+                          {canSeeMedicationDetails && (
+                            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-textSecondary sm:text-base">{medication.purpose || "Supporting general health."}</p>
+                          )}
+                        </div>
+
+                        <div className="flex w-full flex-col items-stretch gap-4 shrink-0 sm:w-auto sm:flex-row sm:items-center">
+                          {canSeeMedicationDetails && (
+                            <div className="h-20 w-full rounded-[1.25rem] border border-slate-100 bg-slate-50 p-4 sm:w-[200px] sm:rounded-2xl">
+                              <p className="text-[10px] font-bold uppercase tracking-widest text-textSecondary mb-2">Refill Progress</p>
+                              <ProgressBar value={refillProgress(daysRemaining)} />
+                            </div>
+                          )}
+                          <div className="flex flex-col gap-2 sm:flex-row">
+                            {canManageMedications && (
+                              <>
+                                <Button variant="ghost" onClick={() => openEditModal(medication)} className="w-full rounded-xl border border-slate-100 sm:w-auto">Edit</Button>
+                                <Button
+                                  variant="secondary"
+                                  onClick={() => toggleMedicationActive(medication, !medication.isActive)}
+                                  className="w-full rounded-xl sm:w-auto"
+                                >
+                                  {medication.isActive ? "Pause" : "Resume"}
+                                </Button>
+                              </>
+                            )}
                           </div>
                         </div>
-                        {canManageMedications ? (
-                          <div className="flex flex-wrap gap-2">
-                            <Button variant="ghost" onClick={() => openEditModal(medication)} disabled={actionBusy}>
-                              Edit
-                            </Button>
-                            <Button
-                              variant="secondary"
-                              onClick={() => void toggleMedicationActive(medication, !medication.isActive)}
-                              disabled={actionBusy}
-                            >
-                              {actionBusy
-                                ? "Saving..."
-                                : medication.isActive
-                                  ? "Deactivate"
-                                  : "Reactivate"}
-                            </Button>
-                          </div>
-                        ) : null}
                       </div>
-                    ) : null}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-      ) : null}
-
-      {tab === "Interaction Checker" ? (
-        <Card>
-          <SectionHeader title="Interaction checker" description="Pick any two or more medications and let CareCircle explain the result in plain English." />
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)]">
-            <div className="space-y-3">
-              <div className="rounded-[24px] bg-slate-50 p-4 text-sm text-textSecondary">
-                {selectedIds.length === 0
-                  ? "Choose at least two medications to compare."
-                  : `${selectedIds.length} medication${selectedIds.length === 1 ? "" : "s"} selected.`}
+                    </motion.div>
+                  );
+                })}
               </div>
-              {activeMedications.map((medication) => {
-                const selected = selectedIds.includes(medication.id);
-                return (
-                  <button
-                    key={medication.id}
-                    type="button"
-                    className={`w-full rounded-3xl border px-4 py-4 text-left transition ${
-                      selected ? "border-brand bg-brandSoft" : "border-borderColor bg-white hover:bg-slate-50"
-                    }`}
-                    onClick={() => {
-                      setInteractionResult(null);
-                      setSelectedIds((current) =>
-                        current.includes(medication.id)
-                          ? current.filter((item) => item !== medication.id)
-                          : [...current, medication.id],
-                      );
-                    }}
-                  >
-                    <p className="font-semibold text-textPrimary">{medication.name}</p>
-                    <p className="mt-1 text-sm text-textSecondary">
-                      {medication.doseAmount}
-                      {medication.doseUnit}
-                    </p>
-                  </button>
-                );
-              })}
-              <Button className="w-full" onClick={checkInteractions} disabled={selectedIds.length < 2 || interactionLoading}>
-                <Sparkles className="h-4 w-4" />
-                {interactionLoading ? "Checking..." : "Check interactions"}
-              </Button>
-            </div>
-            <div className="space-y-3">
-              {interactionResult === null ? (
-                <div className="rounded-[28px] border border-dashed border-borderColor p-8 text-center text-textSecondary">
-                  Select medications, then tap "Check interactions."
-                </div>
-              ) : interactionResult.length === 0 ? (
-                <div className="rounded-[28px] border border-emerald-200 bg-emerald-50 p-6 text-emerald-900">
-                  <p className="font-semibold">No known issues in this combination.</p>
-                  <p className="mt-2 text-sm text-emerald-900/80">
-                    CareCircle did not flag a major interaction for the selected medications in this quick check.
-                  </p>
-                </div>
-              ) : (
-                interactionResult.map((item) => (
-                  <div key={item.title} className="rounded-[28px] border border-borderColor bg-white p-4 shadow-sm">
-                    <div className="flex items-center gap-2">
-                      <Badge tone={item.severity === "severe" ? "danger" : item.severity === "moderate" ? "warning" : "success"}>
-                        {item.severity}
-                      </Badge>
-                      <p className="font-bold text-textPrimary">{item.title}</p>
-                    </div>
-                    <p className="mt-3 text-sm text-textSecondary">{item.explanation}</p>
-                    <p className="mt-3 text-sm font-semibold text-brandDark">{item.next_steps}</p>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </Card>
-      ) : null}
+            </Card>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {tab === "Refill Tracker" ? (
-        <Card>
-          <SectionHeader title="Refill tracker" description="Keep refills from turning into emergencies." />
-          <div className="space-y-3">
-            {activeMedications.length === 0 ? (
-              <EmptyState
-                title="No refill items yet"
-                description="Active medications with refill dates will show up here with pharmacy and reminder actions."
-              />
-            ) : [...activeMedications]
-              .sort((a, b) => a.refillDate.localeCompare(b.refillDate))
-              .map((medication) => {
-                const daysRemaining = Math.ceil((new Date(medication.refillDate).getTime() - Date.now()) / 86400000);
-                const reminderEnabled = bootstrap.viewer.notificationPreferences.medicationReminders;
-                const pharmacyPhone = hasText(medication.pharmacyPhone) ? medication.pharmacyPhone.replaceAll(/[^0-9]/g, "") : "";
-                return (
-                  <div key={medication.id} className="grid gap-3 rounded-[30px] border border-borderColor/70 bg-white p-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,0.8fr)_minmax(0,1fr)] lg:items-center">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-bold text-textPrimary">{medication.name}</p>
-                        <Badge tone={refillTone(daysRemaining)}>
-                          {daysRemaining <= 0 ? "Urgent refill" : `${daysRemaining} day${daysRemaining === 1 ? "" : "s"} left`}
-                        </Badge>
-                      </div>
-                      <p className="mt-1 text-sm text-textSecondary">{medication.pharmacyName || "Pharmacy not saved yet"}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-textPrimary">{formatDate(medication.refillDate)}</p>
-                      <div className="mt-2">
-                        <ProgressBar value={refillProgress(daysRemaining)} />
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {pharmacyPhone ? (
-                        <a href={`tel:${pharmacyPhone}`}>
-                          <Button variant="ghost">
-                            <Phone className="h-4 w-4" />
-                            Call pharmacy
-                          </Button>
-                        </a>
-                      ) : (
-                        <Button variant="ghost" disabled>
-                          <Phone className="h-4 w-4" />
-                          No pharmacy phone
-                        </Button>
-                      )}
-                      <Button variant="secondary" onClick={() => openReminderModal(medication)}>
-                        <BellRing className="h-4 w-4" />
-                        {reminderEnabled ? "Reminder settings" : "Set reminder"}
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
-          </div>
-        </Card>
-      ) : null}
-
-      <Modal
-        open={modalOpen && canManageMedications}
-        title={editingMedicationId ? "Edit medication" : "Add medication"}
-        onClose={closeModal}
-      >
-        <form
-          className="grid gap-4"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (!event.currentTarget.reportValidity()) return;
-            void handleSave();
-          }}
-        >
-          <div className="grid gap-4 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(0,0.8fr)]">
+      <Modal open={modalOpen && canManageMedications} title={editingMedicationId ? "Edit medication" : "Add medication"} onClose={closeModal}>
+        <form className="grid gap-6 p-2" onSubmit={(e) => { e.preventDefault(); void handleSave(); }}>
+          <div className="grid gap-6 sm:grid-cols-[2fr_1fr_1fr]">
             <Field label="Drug name">
-              <Input
-                required
-                value={form.name}
-                placeholder="Example: Lisinopril"
-                onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
-              />
+              <Input required value={form.name} className="h-12 rounded-xl" placeholder="Example: Donepezil" onChange={(e) => setForm({...form, name: e.target.value})} />
             </Field>
             <Field label="Dose">
-              <Input
-                required
-                value={form.doseAmount}
-                placeholder="10"
-                onChange={(event) => setForm((current) => ({ ...current, doseAmount: event.target.value }))}
-              />
+              <Input required value={form.doseAmount} className="h-12 rounded-xl" placeholder="10" onChange={(e) => setForm({...form, doseAmount: e.target.value})} />
             </Field>
             <Field label="Unit">
-              <Select value={form.doseUnit} onChange={(event) => setForm((current) => ({ ...current, doseUnit: event.target.value }))}>
+              <Select value={form.doseUnit} className="h-12 rounded-xl" onChange={(e) => setForm({...form, doseUnit: e.target.value})}>
                 <option value="mg">mg</option>
                 <option value="mcg">mcg</option>
                 <option value="mL">mL</option>
                 <option value="tablet">tablet</option>
                 <option value="capsule">capsule</option>
-                <option value="drops">drops</option>
               </Select>
             </Field>
           </div>
-
-          <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-            <Field label="Frequency" hint="The schedule below updates automatically from this choice.">
-              <Select value={form.frequency} onChange={(event) => setForm((current) => ({ ...current, frequency: event.target.value as typeof current.frequency }))}>
+          <div className="grid gap-6 sm:grid-cols-2">
+            <Field label="Frequency">
+              <Select value={form.frequency} className="h-12 rounded-xl" onChange={(e) => setForm({...form, frequency: e.target.value as any})}>
                 <option value="once">Once daily</option>
                 <option value="twice">Twice daily</option>
                 <option value="three_times">Three times daily</option>
@@ -951,108 +716,22 @@ export const MedicationsPage = () => {
                 <option value="as_needed">As needed</option>
               </Select>
             </Field>
-            <Field label="Refill date">
-              <Input
-                type="date"
-                value={form.refillDate}
-                onChange={(event) => setForm((current) => ({ ...current, refillDate: event.target.value }))}
-              />
+            <Field label="Refill Date">
+              <Input type="date" value={form.refillDate} className="h-12 rounded-xl" onChange={(e) => setForm({...form, refillDate: e.target.value})} />
             </Field>
           </div>
-
-          <div className="rounded-[26px] border border-borderColor/70 bg-slate-50 p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-textSecondary">Dose schedule preview</p>
-            <p className="mt-2 text-sm font-semibold text-textPrimary">
-              {form.frequency === "as_needed"
-                ? "As-needed medications keep one quick-log window in the schedule."
-                : timesOfDayForFrequency(form.frequency).map((timeOfDay) => scheduleLabels[timeOfDay]).join(", ")}
-            </p>
-          </div>
-
           <Field label="Purpose">
-            <Input
-              value={form.purpose}
-              placeholder="What is this medication helping with?"
-              onChange={(event) => setForm((current) => ({ ...current, purpose: event.target.value }))}
-            />
+            <Input value={form.purpose} className="h-12 rounded-xl" placeholder="What is this helping with?" onChange={(e) => setForm({...form, purpose: e.target.value})} />
           </Field>
-
           <Field label="Instructions">
-            <Textarea
-              value={form.instructions}
-              placeholder="Example: Take with breakfast and a full glass of water."
-              onChange={(event) => setForm((current) => ({ ...current, instructions: event.target.value }))}
-            />
+            <Textarea value={form.instructions} className="min-h-[120px] rounded-[1.25rem] p-4" placeholder="Example: Take with breakfast..." onChange={(e) => setForm({...form, instructions: e.target.value})} />
           </Field>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Pharmacy name">
-              <Input
-                value={form.pharmacyName}
-                placeholder="Example: CarePlus Pharmacy"
-                onChange={(event) => setForm((current) => ({ ...current, pharmacyName: event.target.value }))}
-              />
-            </Field>
-            <Field label="Pharmacy phone">
-              <Input
-                value={form.pharmacyPhone}
-                placeholder="(555) 123-4567"
-                onChange={(event) => setForm((current) => ({ ...current, pharmacyPhone: event.target.value }))}
-              />
-            </Field>
-          </div>
-
-          <div className="flex justify-end gap-3">
-            <Button type="button" variant="ghost" onClick={closeModal} disabled={saveBusy}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={saveBusy}>
-              {saveBusy ? "Saving..." : editingMedicationId ? "Save changes" : "Save medication"}
-            </Button>
+          <div className="flex justify-end gap-3 pt-4">
+            <Button type="button" variant="ghost" className="px-8" onClick={closeModal} disabled={saveBusy}>Cancel</Button>
+            <Button type="submit" className="px-8" disabled={saveBusy}>{saveBusy ? "Saving..." : editingMedicationId ? "Save changes" : "Save medication"}</Button>
           </div>
         </form>
       </Modal>
-
-      <Modal
-        open={reminderOpen && reminderMedication !== null}
-        title="Medication reminders"
-        onClose={closeReminderModal}
-      >
-        <div className="space-y-4">
-          <div className="rounded-[26px] border border-borderColor/70 bg-slate-50 p-4">
-            <p className="text-sm font-semibold text-textPrimary">{reminderMedication?.name}</p>
-            <p className="mt-1 text-sm text-textSecondary">
-              Choose whether reminders are on, and when the daily medication prompt should arrive.
-            </p>
-          </div>
-
-          <div className="flex items-center justify-between rounded-[26px] border border-borderColor/70 bg-white p-4">
-            <div>
-              <p className="font-semibold text-textPrimary">Medication reminders</p>
-              <p className="mt-1 text-sm text-textSecondary">
-                Turn alerts on so caregivers see the same reminder rhythm each day.
-              </p>
-            </div>
-            <Toggle checked={reminderEnabled} onChange={setReminderEnabled} disabled={reminderSaving} aria-label="Toggle medication reminders" />
-          </div>
-
-          <Field
-            label="Reminder time"
-            hint={reminderEnabled ? "This updates the shared medication reminder time for the signed-in account." : "Turn reminders on to pick a delivery time."}
-          >
-            <Input type="time" value={reminderTime} disabled={!reminderEnabled || reminderSaving} onChange={(event) => setReminderTime(event.target.value)} />
-          </Field>
-
-          <div className="flex justify-end gap-3">
-            <Button type="button" variant="ghost" onClick={closeReminderModal} disabled={reminderSaving}>
-              Cancel
-            </Button>
-            <Button onClick={() => void saveReminderSettings()} disabled={reminderSaving}>
-              {reminderSaving ? "Saving..." : "Save reminders"}
-            </Button>
-          </div>
-        </div>
-      </Modal>
-    </div>
+    </motion.div>
   );
 };

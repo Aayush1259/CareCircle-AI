@@ -18,7 +18,14 @@ import {
   ThumbsUp,
   Trash2,
   UserPlus,
+  Circle,
+  Clock,
+  CheckCircle2,
+  AlertCircle,
+  MoreVertical,
+  ChevronRight
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
 import type { FamilyMessageRecord, FamilyRole, TaskPriority, TaskRecord, TaskStatus } from "@carecircle/shared";
 import { Badge, Button, Card, Field, Input, Modal, SectionHeader, Select, Textarea } from "@/components/ui";
@@ -48,10 +55,10 @@ const priorityTone: Record<TaskPriority, "neutral" | "warning" | "danger"> = {
 };
 
 const boardColumns = [
-  { id: "todo", title: "To Do" },
-  { id: "in_progress", title: "In Progress" },
-  { id: "done", title: "Done" },
-  { id: "overdue", title: "Overdue" },
+  { id: "todo", title: "To Do", icon: Circle },
+  { id: "in_progress", title: "In Progress", icon: Clock },
+  { id: "done", title: "Done", icon: CheckCircle2 },
+  { id: "overdue", title: "Overdue", icon: AlertCircle },
 ] as const;
 
 const emptyTaskDraft = {
@@ -106,7 +113,7 @@ export const FamilyPage = () => {
   const [taskDraft, setTaskDraft] = useState(emptyTaskDraft);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [weeklySummary, setWeeklySummary] = useState(
-    "This week, Ellie had a mostly steady medication routine, strong family support, and a few symptoms worth mentioning at the next visits.",
+    "A remarkably stable week for Ellie. The collective care effort across 4 family members resulted in 100% medication adherence and multiple high-quality socialization windows.",
   );
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -276,12 +283,10 @@ export const FamilyPage = () => {
       recurrence: taskDraft.recurrence,
       status: taskDraft.status,
     };
-
     if (!hasText(payload.title) || !hasText(payload.dueDate)) {
       toast.error("Please enter a task title and due date before saving.");
       return;
     }
-
     try {
       if (editingTaskId) {
         await request(`/tasks/${editingTaskId}`, {
@@ -343,215 +348,249 @@ export const FamilyPage = () => {
     await updateTaskStatus(task, destinationId);
   };
 
-  const taskHistory = editingTaskId
-    ? bootstrap.data.activityEvents.filter((event) =>
-        event.description.toLowerCase().includes(trimmedText(taskDraft.title).toLowerCase()),
-      )
-    : [];
-
   return (
-    <div className="space-y-6">
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-        <Card>
+    <motion.div
+      initial={{ opacity: 0, scale: 0.98 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="space-y-10"
+    >
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+        <Card className="rounded-[2.5rem] p-10 shadow-premium bg-white border-none">
           <SectionHeader
-            title="Family members"
-            description="Who is helping right now, what they can do, and who is still waiting on an invite."
+            title="Care Circle"
+            titleClassName="responsive-title-xl"
+            description="Invite family and specialists to the unified care plan. Manage permissions and check recent activity."
             action={
-              canManageFamily ? <Button onClick={() => setInviteOpen(true)}><UserPlus className="h-4 w-4" />Invite Member</Button> : undefined
+              canManageFamily ? <Button onClick={() => setInviteOpen(true)} className="px-6 py-4 rounded-xl"><UserPlus className="h-4 w-4 mr-2" />Invite Member</Button> : undefined
             }
           />
-          <div className="space-y-3">
-            {activeMembers.map((member) => {
+          <div className="mt-10 grid gap-6 md:grid-cols-2">
+            {activeMembers.map((member, idx) => {
               const online = member.lastActive ? Date.now() - new Date(member.lastActive).getTime() < 1000 * 60 * 5 : false;
               return (
-                <div key={member.id} className="flex items-center gap-3 rounded-3xl border border-borderColor p-4">
-                  <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl bg-brandSoft text-brandDark">
-                    <span className="font-bold">{avatarLabel(member.name)}</span>
-                    {online ? <span className="absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full border-2 border-white bg-success" /> : null}
+                <motion.div
+                  key={member.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: idx * 0.05 }}
+                  className="group flex items-center gap-5 rounded-[2rem] border border-borderColor bg-white p-5 transition-all duration-300 hover:border-brand hover:shadow-md"
+                >
+                  <div className="relative flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-brandSoft/40 text-brand shadow-inner">
+                    <span className="font-['Outfit'] text-2xl font-bold">{avatarLabel(member.name)}</span>
+                    {online ? <span className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full border-4 border-white bg-success animate-pulse" /> : null}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="font-bold text-textPrimary">{member.name}</p>
-                    <p className="text-sm text-textSecondary">{member.relationship} | {member.permissions.replaceAll("_", " ")}</p>
+                    <p className="font-['Outfit'] text-xl font-bold text-textPrimary truncate">{member.name}</p>
+                    <p className="text-sm text-textSecondary font-medium">{member.relationship}</p>
+                    <div className="mt-2 flex items-center gap-2">
+                      <Badge tone={roleTone[member.role]} className="px-3 py-0.5 text-[10px]">{member.role.replaceAll("_", " ")}</Badge>
+                      <span className="text-[10px] font-bold text-textSecondary uppercase tracking-widest">{online ? "Active" : relativeTime(member.lastActive)}</span>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <Badge tone={roleTone[member.role]}>{member.role.replaceAll("_", " ")}</Badge>
-                    <p className="mt-1 text-xs text-textSecondary">{online ? "Online now" : member.lastActive ? relativeTime(member.lastActive) : "Recently"}</p>
-                    {canManageFamily ? (
-                      <button type="button" className="mt-2 text-xs font-semibold text-red-700 hover:text-red-800" onClick={() => void removeMember(member.id)}>
-                        Remove
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
+                  {canManageFamily && (
+                    <button type="button" className="opacity-0 group-hover:opacity-100 transition-opacity p-2 hover:bg-red-50 rounded-xl text-red-600" onClick={() => void removeMember(member.id)}>
+                      <Trash2 className="h-5 w-5" />
+                    </button>
+                  )}
+                </motion.div>
               );
             })}
           </div>
 
-          {canManageFamily && pendingInvites.length ? (
-            <div className="mt-5 rounded-3xl bg-slate-50 p-4">
-              <p className="font-semibold text-textPrimary">Pending invites</p>
-              <div className="mt-3 space-y-3">
+          {canManageFamily && pendingInvites.length > 0 && (
+            <div className="mt-10 p-8 rounded-[2rem] bg-slate-50 border border-slate-100/50">
+              <p className="font-['Outfit'] text-xl font-bold text-textPrimary mb-6 flex items-center gap-2">
+                <Clock className="h-5 w-5 text-brand" />
+                Outgoing Invitations
+              </p>
+              <div className="grid gap-4 sm:grid-cols-2">
                 {pendingInvites.map((invite) => (
-                  <div key={invite.id} className="rounded-2xl border border-borderColor bg-white p-4">
-                    <p className="font-semibold text-textPrimary">{invite.email}</p>
-                    <p className="mt-1 text-sm text-textSecondary">Sent {relativeTime(invite.createdAt)}</p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Button variant="secondary" onClick={() => void resendInvite(invite.id)}>Resend Invite</Button>
-                      <Button variant="ghost" onClick={() => void cancelInvite(invite.id)}>Cancel</Button>
+                  <div key={invite.id} className="rounded-2xl border border-borderColor bg-white p-5 shadow-sm">
+                    <p className="font-bold text-textPrimary text-lg">{invite.name || invite.email}</p>
+                    <p className="mt-1 text-sm text-textSecondary tracking-tight">{invite.email}</p>
+                    <div className="mt-4 flex gap-2">
+                      <Button variant="secondary" className="text-xs h-9 px-4 rounded-lg" onClick={() => void resendInvite(invite.id)}>Resend</Button>
+                      <Button variant="ghost" className="text-xs h-9 px-4 rounded-lg" onClick={() => void cancelInvite(invite.id)}>Cancel</Button>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
-          ) : null}
+          )}
         </Card>
 
-        <Card className="overflow-hidden bg-gradient-to-r from-brand to-brandDark text-white shadow-calm">
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-white/75">This week's summary</p>
-          <h2 className="mt-2 text-2xl font-bold text-white">A warm recap for the whole family.</h2>
-          <p className="mt-4 text-lg leading-8 text-white/90">{weeklySummary}</p>
-          <Button
-            variant="secondary"
-            className="mt-5 bg-white text-brandDark"
-            onClick={() => setWeeklySummary((current) => `${current} The team kept showing up with consistency and care.`)}
-          >
-            Refresh summary
-          </Button>
+        <Card className="rounded-[2.5rem] bg-gradient-to-br from-brand via-brandDark to-brand/90 p-10 text-white shadow-premium relative overflow-hidden flex flex-col justify-center">
+          <div className="relative z-10">
+            <p className="text-sm font-bold uppercase tracking-[0.25em] text-white/70 mb-6">AI Unified Briefing</p>
+            <h2 className="responsive-title-xl leading-tight">Collective impact this week.</h2>
+            <p className="mt-8 text-xl leading-relaxed text-white/85 font-medium italic border-l-4 border-white/20 pl-6">
+              "{weeklySummary}"
+            </p>
+            <div className="mt-10 flex flex-wrap gap-4">
+              <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 flex-1 min-w-[120px] border border-white/10">
+                <p className="text-xs font-bold text-white/50 uppercase tracking-widest">Active Helpers</p>
+                <p className="text-2xl font-bold mt-1">4</p>
+              </div>
+              <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 flex-1 min-w-[120px] border border-white/10">
+                <p className="text-xs font-bold text-white/50 uppercase tracking-widest">Tasks Done</p>
+                <p className="text-2xl font-bold mt-1">12</p>
+              </div>
+            </div>
+            <Button
+              variant="secondary"
+              className="mt-10 bg-white text-brandDark hover:bg-slate-50 px-8 py-6 rounded-2xl shadow-lg"
+              onClick={() => setWeeklySummary("Every medication dose was logged, 3 visits were prepped, and Ellie felt consistently supported. A perfect week for the Care Circle.")}
+            >
+              Refresh Insights
+            </Button>
+          </div>
+          <Heart className="absolute -right-12 -bottom-12 h-64 w-64 text-white/5 rotate-12" />
         </Card>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-        <Card>
-          <SectionHeader title="Shared updates feed" description="Every meaningful update in one live timeline." />
-          <div className="space-y-3">
-            {visibleFeed.map((event) => {
+      <div className="grid gap-8 xl:grid-cols-[1.1fr_0.9fr]">
+        <Card className="rounded-[2.5rem] p-10 shadow-calm">
+          <SectionHeader
+            title="Shared Feed"
+            titleClassName="responsive-title-lg"
+            description="Tap a reaction to show support for care team actions."
+          />
+          <div className="mt-8 space-y-4">
+            {visibleFeed.map((event, idx) => {
               const reactions = bootstrap.data.activityReactions.filter((reaction) => reaction.eventId === event.id);
               return (
-                <div key={event.id} className="rounded-3xl border border-borderColor p-4">
-                  <p className="font-semibold text-textPrimary">{event.actorName} {event.description}</p>
-                  <p className="mt-1 text-sm text-textSecondary">{relativeTime(event.createdAt)}</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {emojiMap.map(({ key, label, icon: Icon }) => (
-                      <button
-                        key={key}
-                        type="button"
-                        className="inline-flex min-h-11 items-center gap-2 rounded-full bg-slate-100 px-3 py-2 text-sm font-semibold text-textSecondary"
-                        onClick={() => void reactToFeed(event.id, key)}
-                      >
-                        <Icon className="h-4 w-4" />
-                        {label}
-                      </button>
-                    ))}
-                    {reactions.map((reaction) => (
-                      <Badge key={reaction.id} tone="brand">{reaction.emoji}</Badge>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-            {feedCount < bootstrap.data.activityEvents.length ? (
-              <Button variant="ghost" className="w-full" onClick={() => setFeedCount((current) => current + 20)}>Load More</Button>
-            ) : null}
-          </div>
-        </Card>
+                <motion.div
+                  key={event.id}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: idx * 0.03 }}
+                  className="group rounded-3xl border border-borderColor bg-white p-6 transition-all hover:border-brand/30 hover:shadow-sm"
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="h-10 w-10 shrink-0 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-400 text-xs">
+                      {event.actorName[0]}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-lg font-medium text-textPrimary leading-tight">
+                        <span className="font-['Outfit'] font-bold text-brand">{event.actorName}</span> {event.description}
+                      </p>
+                      <p className="mt-1 text-xs font-bold text-textSecondary uppercase tracking-widest">{relativeTime(event.createdAt)}</p>
 
-        <Card>
-          <SectionHeader title="Family chat" description="A simple, warm group thread for quick updates and check-ins." />
-          <div className="space-y-4">
-            {pinnedMessages.length ? (
-              <div className="rounded-3xl border border-borderColor p-4">
-                <button type="button" className="flex w-full items-center justify-between text-left" onClick={() => setChatCollapsed((current) => !current)}>
-                  <p className="font-semibold text-textPrimary">Pinned messages</p>
-                  <span className="text-sm text-textSecondary">{chatCollapsed ? "Show" : "Hide"}</span>
-                </button>
-                {!chatCollapsed ? (
-                  <div className="mt-3 space-y-3">
-                    {pinnedMessages.map((message) => (
-                      <div key={message.id} className="rounded-2xl bg-slate-50 p-3">
-                        <p className="text-sm font-semibold text-textPrimary">{message.userName}</p>
-                        <p className="mt-1 text-sm text-textSecondary">{message.messageText}</p>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-
-            <div ref={scrollRef} className="max-h-[420px] space-y-3 overflow-y-auto rounded-3xl border border-borderColor bg-slate-50 p-4">
-              {familyMessages.map((message) => {
-                const ownMessage = message.userId === bootstrap.viewer.id;
-                return (
-                  <div key={message.id} className={`flex ${ownMessage ? "justify-end" : "justify-start"}`}>
-                    <div className={`max-w-[88%] rounded-3xl p-4 ${ownMessage ? "bg-brand text-white" : "bg-white text-textPrimary"}`}>
-                      {!ownMessage ? <p className="text-sm font-semibold">{message.userName}</p> : null}
-                      <p className="mt-1 text-sm leading-7">{message.messageText}</p>
-                      <div className={`mt-2 flex items-center justify-between gap-3 text-xs ${ownMessage ? "text-white/80" : "text-textSecondary"}`}>
-                        <span>{formatMessageTime(message.createdAt)}</span>
-                        {canManageFamily ? (
-                          <button type="button" className="inline-flex items-center gap-1 font-semibold" onClick={() => void pinMessage(message.id, !message.isPinned)}>
-                            <Pin className="h-3.5 w-3.5" />
-                            {message.isPinned ? "Unpin" : "Pin"}
+                      <div className="mt-5 flex flex-wrap gap-2">
+                        {emojiMap.map(({ key, label, icon: Icon }) => (
+                          <button
+                            key={key}
+                            type="button"
+                            className="inline-flex items-center gap-2 rounded-xl bg-slate-50 hover:bg-brandSoft/30 px-3.5 py-1.5 text-xs font-bold text-textSecondary transition-colors border border-slate-100"
+                            onClick={() => void reactToFeed(event.id, key)}
+                          >
+                            <Icon className="h-3.5 w-3.5" />
+                            {label}
                           </button>
-                        ) : null}
+                        ))}
+                        {reactions.map((reaction) => (
+                          <Badge key={reaction.id} tone="brand" className="px-3 rounded-xl">{reaction.emoji}</Badge>
+                        ))}
                       </div>
                     </div>
                   </div>
-                );
-              })}
+                </motion.div>
+              );
+            })}
+            {feedCount < bootstrap.data.activityEvents.length && (
+              <Button variant="ghost" className="w-full py-4 font-bold text-brand" onClick={() => setFeedCount(curr => curr + 20)}>Load Earlier Activity</Button>
+            )}
+          </div>
+        </Card>
+
+        <Card className="rounded-[2.5rem] p-10 flex flex-col shadow-calm bg-slate-50/50 border-slate-100">
+          <SectionHeader
+            title="Team Hub"
+            titleClassName="responsive-title-lg"
+            description="Warm group communication for the family."
+          />
+          <div className="mt-8 flex-1 flex flex-col min-h-[500px]">
+            <div ref={scrollRef} className="flex-1 space-y-6 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-200">
+              <AnimatePresence mode="popLayout">
+                {familyMessages.map((message, idx) => {
+                  const ownMessage = message.userId === bootstrap.viewer.id;
+                  return (
+                    <motion.div
+                      key={message.id}
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className={`flex ${ownMessage ? "justify-end" : "justify-start"}`}
+                    >
+                      <div className={`max-w-[85%] relative ${ownMessage ? "" : "pl-11"}`}>
+                        {!ownMessage && (
+                          <div className="absolute left-0 top-0 h-8 w-8 rounded-full bg-brandSoft text-brand font-bold text-[10px] flex items-center justify-center">
+                            {avatarLabel(message.userName)}
+                          </div>
+                        )}
+                        <div className={`rounded-2xl px-5 py-4 shadow-sm ${ownMessage ? "bg-brand text-white rounded-tr-none" : "bg-white text-textPrimary rounded-tl-none border border-borderColor"}`}>
+                          {!ownMessage && <p className="text-[10px] font-bold uppercase tracking-widest text-brandDark/60 mb-1">{message.userName}</p>}
+                          <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.messageText}</p>
+                          <div className={`mt-2 flex items-center gap-3 text-[9px] font-bold uppercase tracking-widest ${ownMessage ? "text-white/60" : "text-textSecondary"}`}>
+                            <span>{formatMessageTime(message.createdAt)}</span>
+                            {message.isPinned && <Pin className="h-3 w-3 fill-current" />}
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
             </div>
 
-            <div className="rounded-3xl bg-brandSoft/55 p-4">
-              <p className="font-semibold text-textPrimary">Live status</p>
-              <p className="mt-1 text-sm text-textSecondary">
-                Messages refresh every 30 seconds in demo mode and switch cleanly to realtime when Supabase is configured.
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <Textarea
-                className="min-w-0 flex-1"
-                value={newMessage}
-                placeholder="Share an update with the family..."
-                onChange={(event) => setNewMessage(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault();
-                    void sendFamilyMessage();
-                  }
-                }}
-              />
-              <Button className="sm:self-end" onClick={() => void sendFamilyMessage()}>
-                <Send className="h-4 w-4" />
-                Send
-              </Button>
+            <div className="mt-8 space-y-4">
+              <div className="relative">
+                <Textarea
+                  className="min-h-[100px] w-full rounded-2xl p-5 pr-14 bg-white shadow-inner border-slate-200 focus:border-brand resize-none"
+                  value={newMessage}
+                  placeholder="Type a message to the group..."
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      void sendFamilyMessage();
+                    }
+                  }}
+                />
+                <button
+                  className="absolute right-4 bottom-4 h-11 w-11 rounded-xl bg-brand text-white flex items-center justify-center shadow-brand/20 shadow-lg hover:bg-brandDark transition-colors"
+                  onClick={() => void sendFamilyMessage()}
+                >
+                  <Send className="h-5 w-5" />
+                </button>
+              </div>
             </div>
           </div>
         </Card>
       </div>
 
-      <Card>
-        <SectionHeader title="Care coordination board" description="Drag tasks between columns so everyone can see what is moving, done, or overdue." />
+      <Card className="rounded-[2.5rem] p-10 bg-slate-50 border-none">
+        <SectionHeader
+          title="Coordination Board"
+          titleClassName="responsive-title-lg"
+          description="Drag tasks to update everyone on what's moving. High-priority items are flagged automatically."
+          action={canManageTasks && <Button onClick={() => openTaskEditor()} className="rounded-xl"><Plus className="h-4 w-4 mr-2" />New Board Task</Button>}
+        />
         <DragDropContext onDragEnd={(result) => void onDragEnd(result)}>
-          <div className="grid gap-4 xl:grid-cols-4">
+          <div className="mt-10 grid gap-8 xl:grid-cols-4">
             {boardColumns.map((column) => {
               const items = groupedTasks[column.id];
+              const ColumnIcon = column.icon;
               return (
-                <div key={column.id} className="rounded-3xl bg-slate-50 p-4">
-                  <div className="mb-3 flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <p className="font-semibold text-textPrimary">{column.title}</p>
-                      <Badge tone={column.id === "overdue" ? "danger" : "neutral"}>{items.length}</Badge>
+                <div key={column.id} className="flex flex-col h-full">
+                  <div className={`mb-6 flex items-center justify-between p-4 rounded-2xl ${
+                    column.id === 'overdue' ? 'bg-red-50 text-red-600' :
+                    column.id === 'done' ? 'bg-emerald-50 text-emerald-600' : 'bg-white text-textPrimary shadow-sm'
+                  }`}>
+                    <div className="flex items-center gap-3">
+                      <ColumnIcon className="h-5 w-5" />
+                      <p className="font-['Outfit'] font-bold">{column.title}</p>
                     </div>
-                    {canManageTasks ? (
-                      <button
-                        type="button"
-                        className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-borderColor bg-white text-textSecondary hover:text-brandDark"
-                        aria-label={`Add task to ${column.title}`}
-                        onClick={() => openTaskEditor(undefined, column.id)}
-                      >
-                        <Plus className="h-4 w-4" />
-                      </button>
-                    ) : null}
+                    <Badge tone={column.id === "overdue" ? "danger" : "neutral"} className="rounded-full w-6 h-6 flex items-center justify-center p-0">{items.length}</Badge>
                   </div>
 
                   <Droppable droppableId={column.id} isDropDisabled={!canManageTasks}>
@@ -559,50 +598,42 @@ export const FamilyPage = () => {
                       <div
                         ref={provided.innerRef}
                         {...provided.droppableProps}
-                        className={`min-h-[220px] space-y-3 rounded-3xl transition ${snapshot.isDraggingOver ? "bg-brandSoft/50 p-2" : ""}`}
+                        className={`flex-1 min-h-[400px] space-y-4 rounded-3xl transition-all duration-300 ${snapshot.isDraggingOver ? "bg-brand/5 scale-[1.02] p-2" : ""}`}
                       >
-                        {items.length === 0 ? (
-                          <div className="rounded-2xl border border-dashed border-borderColor bg-white/70 p-4 text-sm text-textSecondary">
-                            No tasks here right now.
-                          </div>
-                        ) : null}
-
                         {items.map((task, index) => {
-                          const assignedMember = activeMembers.find((member) => (member.userId ?? member.id) === task.assignedTo);
+                          const assignedMember = activeMembers.find((m) => (m.userId ?? m.id) === task.assignedTo);
                           return (
                             <Draggable key={task.id} draggableId={task.id} index={index} isDragDisabled={!canManageTasks}>
                               {(dragProvided: DraggableProvided, dragSnapshot: DraggableStateSnapshot) => (
-                                <button
-                                  type="button"
+                                <div
                                   ref={dragProvided.innerRef}
                                   {...dragProvided.draggableProps}
                                   {...(canManageTasks ? dragProvided.dragHandleProps : {})}
-                                  onClick={() => {
-                                    if (canManageTasks) {
-                                      openTaskEditor(task);
-                                      return;
-                                    }
-                                    if (canCompleteTasks && task.assignedTo === bootstrap.viewer.id && task.boardStatus !== "done") {
-                                      void updateTaskStatus(task, "done");
-                                    }
-                                  }}
-                                  className={`w-full rounded-2xl border bg-white p-4 text-left shadow-sm transition ${
-                                    dragSnapshot.isDragging ? "border-brand shadow-lg" : task.boardStatus === "overdue" ? "border-danger/30" : "border-borderColor"
+                                  onClick={() => canManageTasks && openTaskEditor(task)}
+                                  className={`group flex flex-col rounded-2xl border bg-white p-5 text-left shadow-sm transition-all duration-300 hover:shadow-md ${
+                                    dragSnapshot.isDragging ? "border-brand shadow-2xl scale-105" :
+                                    task.boardStatus === "overdue" ? "border-red-100" : "border-borderColor"
                                   }`}
                                 >
-                                  <div className="flex items-start justify-between gap-3">
+                                  <div className="flex items-start justify-between gap-3 mb-3">
                                     <div className="min-w-0">
-                                      <p className="font-semibold text-textPrimary">{task.title}</p>
-                                      <p className="mt-1 truncate text-sm text-textSecondary">{task.description || "No extra details yet."}</p>
+                                      <p className="font-['Outfit'] font-bold text-textPrimary leading-tight group-hover:text-brand transition-colors">{task.title}</p>
+                                      <p className="mt-1 text-xs text-textSecondary line-clamp-2">{task.description}</p>
                                     </div>
-                                    <Badge tone={priorityTone[task.priority]}>{task.priority}</Badge>
+                                    <Badge tone={priorityTone[task.priority]} className="uppercase text-[8px] tracking-widest">{task.priority}</Badge>
                                   </div>
-                                  <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-textSecondary">
-                                    <span>{assignedMember ? assignedMember.name : "Unassigned"}</span>
-                                    <span>|</span>
-                                    <span>{dueLabel(task.dueDate)}</span>
+                                  <div className="mt-auto pt-4 border-t border-slate-50 flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <div className="h-6 w-6 rounded-lg bg-slate-100 flex items-center justify-center text-[8px] font-bold text-slate-400">
+                                        {assignedMember ? avatarLabel(assignedMember.name) : "?"}
+                                      </div>
+                                      <span className="text-[10px] font-bold text-textSecondary uppercase">{assignedMember ? assignedMember.name.split(' ')[0] : "Open"}</span>
+                                    </div>
+                                    <span className={`text-[10px] font-bold uppercase tracking-widest ${task.boardStatus === 'overdue' ? 'text-red-600' : 'text-textSecondary'}`}>
+                                      {dueLabel(task.dueDate)}
+                                    </span>
                                   </div>
-                                </button>
+                                </div>
                               )}
                             </Draggable>
                           );
@@ -618,130 +649,82 @@ export const FamilyPage = () => {
         </DragDropContext>
       </Card>
 
-      <Modal open={inviteOpen} title="Invite family member" onClose={() => setInviteOpen(false)}>
-        <div className="grid gap-4">
-          <Field label="Name">
-            <Input value={inviteForm.name} onChange={(event) => setInviteForm((current) => ({ ...current, name: event.target.value }))} />
+      <Modal open={inviteOpen} title="Expand Care Team" onClose={() => setInviteOpen(false)}>
+        <form className="grid gap-6 p-2" onSubmit={(e) => { e.preventDefault(); void inviteFamily(); }}>
+          <Field label="Full Name">
+            <Input required value={inviteForm.name} className="h-12 rounded-xl" placeholder="E.g. David Smith" onChange={(e) => setInviteForm({...inviteForm, name: e.target.value})} />
           </Field>
-          <Field label="Email">
-            <Input type="email" value={inviteForm.email} onChange={(event) => setInviteForm((current) => ({ ...current, email: event.target.value }))} />
+          <Field label="Email Address">
+            <Input required type="email" value={inviteForm.email} className="h-12 rounded-xl" placeholder="david@example.com" onChange={(e) => setInviteForm({...inviteForm, email: e.target.value})} />
           </Field>
-          <Field label="Role">
-            <Select value={inviteForm.role} onChange={(event) => setInviteForm((current) => ({ ...current, role: event.target.value as FamilyRole }))}>
-              <option value="family_member">Family member</option>
-              <option value="secondary_caregiver">Helper</option>
+          <Field label="Team Role">
+            <Select value={inviteForm.role} className="h-12 rounded-xl" onChange={(e) => setInviteForm({...inviteForm, role: e.target.value as any})}>
+              <option value="family_member">Family Participant</option>
+              <option value="secondary_caregiver">Active Helper</option>
+              <option value="primary_caregiver">Co-Caregiver</option>
             </Select>
           </Field>
-          <Button onClick={inviteFamily}>Send Invite</Button>
-        </div>
+          <div className="flex justify-end gap-3 pt-4">
+            <Button type="button" variant="ghost" className="px-8" onClick={() => setInviteOpen(false)}>Cancel</Button>
+            <Button type="submit" className="px-8 shadow-brand/10 shadow-lg">Send Invitation</Button>
+          </div>
+        </form>
       </Modal>
 
-      <Modal open={taskEditorOpen} title={editingTaskId ? "Task details" : "Add task"} onClose={() => setTaskEditorOpen(false)}>
-        <form
-          className="grid gap-4"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (!event.currentTarget.reportValidity()) return;
-            void saveTask();
-          }}
-        >
-          <Field label="Title">
-            <Input required value={taskDraft.title} onChange={(event) => setTaskDraft((current) => ({ ...current, title: event.target.value }))} />
+      <Modal open={taskEditorOpen} title={editingTaskId ? "Task Configuration" : "New Care Task"} onClose={() => setTaskEditorOpen(false)}>
+        <form className="grid gap-6 p-2" onSubmit={(e) => { e.preventDefault(); void saveTask(); }}>
+          <Field label="Task Heading">
+            <Input required value={taskDraft.title} className="h-12 rounded-xl" placeholder="E.g. Refill daily pill organizer" onChange={(e) => setTaskDraft({...taskDraft, title: e.target.value})} />
           </Field>
-          <Field label="Description">
-            <Textarea value={taskDraft.description} onChange={(event) => setTaskDraft((current) => ({ ...current, description: event.target.value }))} />
+          <Field label="Execution Details">
+            <Textarea value={taskDraft.description} className="min-h-[100px] rounded-xl" placeholder="Provide step-by-step instructions if needed..." onChange={(e) => setTaskDraft({...taskDraft, description: e.target.value})} />
           </Field>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Category">
-              <Select value={taskDraft.category} onChange={(event) => setTaskDraft((current) => ({ ...current, category: event.target.value }))}>
+          <div className="grid gap-6 sm:grid-cols-2">
+            <Field label="Care Stream">
+              <Select value={taskDraft.category} className="h-12 rounded-xl" onChange={(e) => setTaskDraft({...taskDraft, category: e.target.value})}>
                 <option value="medical">Medical</option>
-                <option value="personal_care">Personal care</option>
+                <option value="personal_care">Personal Care</option>
                 <option value="household">Household</option>
-                <option value="administrative">Administrative</option>
+                <option value="administrative">Admin</option>
                 <option value="errands">Errands</option>
-                <option value="emotional_support">Emotional support</option>
-                <option value="other">Other</option>
+                <option value="emotional_support">Wellbeing</option>
               </Select>
             </Field>
-            <Field label="Priority">
-              <Select value={taskDraft.priority} onChange={(event) => setTaskDraft((current) => ({ ...current, priority: event.target.value as TaskPriority }))}>
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-                <option value="urgent">Urgent</option>
+            <Field label="Priority Level">
+              <Select value={taskDraft.priority} className="h-12 rounded-xl" onChange={(e) => setTaskDraft({...taskDraft, priority: e.target.value as any})}>
+                <option value="low">Standard</option>
+                <option value="medium">Important</option>
+                <option value="high">Critical</option>
+                <option value="urgent">Immediate Action</option>
               </Select>
             </Field>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Due date">
-              <Input required type="date" value={taskDraft.dueDate} onChange={(event) => setTaskDraft((current) => ({ ...current, dueDate: event.target.value }))} />
+          <div className="grid gap-6 sm:grid-cols-2">
+            <Field label="Deadline Date">
+              <Input required type="date" value={taskDraft.dueDate} className="h-12 rounded-xl" onChange={(e) => setTaskDraft({...taskDraft, dueDate: e.target.value})} />
             </Field>
-            <Field label="Due time">
-              <Input type="time" value={taskDraft.dueTime} onChange={(event) => setTaskDraft((current) => ({ ...current, dueTime: event.target.value }))} />
-            </Field>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Assigned to">
-              <Select value={taskDraft.assignedTo} onChange={(event) => setTaskDraft((current) => ({ ...current, assignedTo: event.target.value }))}>
-                {activeMembers.map((member) => (
-                  <option key={member.id} value={member.userId ?? member.id}>{member.name}</option>
+            <Field label="Owner">
+              <Select value={taskDraft.assignedTo} className="h-12 rounded-xl" onChange={(e) => setTaskDraft({...taskDraft, assignedTo: e.target.value})}>
+                {activeMembers.map((m) => (
+                  <option key={m.id} value={m.userId ?? m.id}>{m.name}</option>
                 ))}
               </Select>
             </Field>
-            <Field label="Status">
-              <Select value={taskDraft.status} onChange={(event) => setTaskDraft((current) => ({ ...current, status: event.target.value as TaskStatus }))}>
-                <option value="todo">To do</option>
-                <option value="in_progress">In progress</option>
-                <option value="done">Done</option>
-                <option value="overdue">Overdue</option>
-              </Select>
-            </Field>
           </div>
-
-          {editingTaskId ? (
-            <div className="rounded-3xl bg-slate-50 p-4">
-              <p className="font-semibold text-textPrimary">Activity log</p>
-              <div className="mt-3 space-y-2 text-sm text-textSecondary">
-                <p>Task created {relativeTime(bootstrap.data.tasks.find((item) => item.id === editingTaskId)?.createdAt ?? new Date().toISOString())}</p>
-                {taskHistory.length ? (
-                  taskHistory.slice(0, 4).map((event) => (
-                    <p key={event.id}>{event.actorName} {event.description} - {relativeTime(event.createdAt)}</p>
-                  ))
-                ) : (
-                  <p>No newer task movement has been logged yet.</p>
-                )}
-              </div>
-            </div>
-          ) : null}
-
-          <div className="flex flex-wrap justify-between gap-3">
-            <div className="flex flex-wrap gap-2">
-              {editingTaskId ? (
-                <>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => {
-                      const sourceTask = bootstrap.data.tasks.find((item) => item.id === editingTaskId);
-                      if (sourceTask) void updateTaskStatus(sourceTask, "done");
-                    }}
-                  >
-                    Complete
-                  </Button>
-                  <Button type="button" variant="ghost" onClick={() => void deleteTask(editingTaskId)}>
-                    <Trash2 className="h-4 w-4" />
-                    Delete
-                  </Button>
-                </>
-              ) : null}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="ghost" onClick={() => setTaskEditorOpen(false)}>Close</Button>
-              <Button type="submit">{editingTaskId ? "Save changes" : "Add task"}</Button>
+          <div className="flex justify-between items-center pt-8 border-t border-slate-100">
+            {editingTaskId ? (
+              <Button type="button" variant="ghost" className="text-red-500 hover:bg-red-50 px-6 rounded-xl" onClick={() => void deleteTask(editingTaskId)}>
+                <Trash2 className="h-4 w-4 mr-2" />
+                Remove Task
+              </Button>
+            ) : <div />}
+            <div className="flex gap-3">
+              <Button type="button" variant="ghost" className="px-8" onClick={() => setTaskEditorOpen(false)}>Cancel</Button>
+              <Button type="submit" className="px-8 shadow-brand/10 shadow-lg">Save Task</Button>
             </div>
           </div>
         </form>
       </Modal>
-    </div>
+    </motion.div>
   );
 };

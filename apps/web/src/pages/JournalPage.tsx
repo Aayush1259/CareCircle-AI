@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Lock, Search, Sparkles } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
 import type { CareJournalRecord } from "@carecircle/shared";
 import { Badge, Button, Card, EmptyState, Field, Input, Modal, SectionHeader, Select, Textarea, Toggle } from "@/components/ui";
@@ -171,10 +172,15 @@ export const JournalPage = () => {
   };
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
-      <Card className="h-fit">
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="grid gap-8 xl:grid-cols-[minmax(0,0.4fr)_minmax(0,0.6fr)]"
+    >
+      <Card className="h-fit rounded-[2.5rem] p-8">
         <SectionHeader
           title="Care journal"
+          titleClassName="responsive-title-lg"
           description={
             viewerRole === "family_member"
               ? "Shared notes and your own entries, without the clinician-only AI tools."
@@ -182,15 +188,24 @@ export const JournalPage = () => {
                 ? "Review what caregivers have shared and add context when needed."
                 : "Search, filter, and find what changed."
           }
-          action={canLogJournal ? <Button onClick={() => setModalOpen(true)} disabled={saveBusy}>New entry</Button> : undefined}
+          action={canLogJournal ? <Button onClick={() => setModalOpen(true)} disabled={saveBusy} className="px-6 py-4">New entry</Button> : undefined}
         />
-        <div className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,180px)]">
+        <div className="space-y-6 mt-6">
+          <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,180px)]">
             <div className="relative">
               <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-textSecondary" />
-              <Input value={query} placeholder="Search entries..." className="pl-11" onChange={(event) => setQuery(event.target.value)} />
+              <Input
+                value={query}
+                placeholder="Search entries..."
+                className="pl-11 h-12 rounded-2xl"
+                onChange={(event) => setQuery(event.target.value)}
+              />
             </div>
-            <Select value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value)}>
+            <Select
+              value={severityFilter}
+              className="h-12 rounded-2xl"
+              onChange={(event) => setSeverityFilter(event.target.value)}
+            >
               <option value="all">All severity</option>
               <option value="low">Just noting</option>
               <option value="medium">Worth watching</option>
@@ -198,156 +213,234 @@ export const JournalPage = () => {
               <option value="emergency">Emergency</option>
             </Select>
           </div>
-          <div className="space-y-3">
-            {entries.length === 0 ? (
-              <EmptyState title="No journal entries match" description="Try a different search or add a new care note." />
-            ) : (
-              entries.map((entry) => (
-                <button
-                  key={entry.id}
-                  type="button"
-                  onClick={() => setSelectedId(entry.id)}
-                  className={`w-full rounded-3xl border p-4 text-left ${selectedEntry?.id === entry.id ? "border-brand bg-brandSoft/50" : "border-borderColor bg-white"}`}
+
+          <div className="space-y-3 mt-8">
+            <AnimatePresence mode="popLayout">
+              {entries.length === 0 ? (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  key="empty"
                 >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-bold text-textPrimary">{entry.entryTitle}</p>
-                    <Badge tone={severityTone[entry.severity]}>{entry.severity}</Badge>
-                    {entry.isNew ? <Badge tone="brand">NEW</Badge> : null}
-                  </div>
-                  <p className="mt-1 text-sm text-textSecondary">
-                    {formatDate(entry.date)} at {entry.time}
-                  </p>
-                  <p className="mt-2 text-sm text-textSecondary">{entry.entryBody.slice(0, 90)}...</p>
-                </button>
-              ))
-            )}
+                  <EmptyState title="No journal entries match" description="Try a different search or add a new care note." />
+                </motion.div>
+              ) : (
+                entries.map((entry, index) => (
+                  <motion.button
+                    key={entry.id}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    type="button"
+                    onClick={() => setSelectedId(entry.id)}
+                    className={`w-full rounded-[1.25rem] border p-5 text-left transition-all duration-300 ${
+                      selectedEntry?.id === entry.id
+                        ? "border-brand bg-brandSoft/40 ring-2 ring-brand/10 shadow-lg scale-[1.02]"
+                        : "border-borderColor bg-white hover:border-brand/30 hover:shadow-md"
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-['Outfit'] font-bold text-textPrimary text-lg">{entry.entryTitle}</p>
+                        <Badge tone={severityTone[entry.severity]}>{entry.severity}</Badge>
+                        {entry.isNew ? <Badge tone="brand">NEW</Badge> : null}
+                      </div>
+                      <p className="text-xs font-semibold text-textSecondary uppercase tracking-wider">
+                        {formatDate(entry.date)}
+                      </p>
+                    </div>
+                    <p className="mt-2 text-sm text-textSecondary line-clamp-2 leading-relaxed">
+                      {entry.entryBody}
+                    </p>
+                  </motion.button>
+                ))
+              )}
+            </AnimatePresence>
           </div>
         </div>
       </Card>
 
-      <div className="space-y-6">
-        {selectedEntry ? (
-          <Card>
-            <SectionHeader
-              title={selectedEntry.entryTitle}
-              description={`${formatDate(selectedEntry.date)} at ${selectedEntry.time} | ${relativeTime(selectedEntry.createdAt)}`}
-              action={canAnalyzeEntries ? (
-                <Button variant="secondary" onClick={() => analyzeEntry(selectedEntry)} disabled={analyzingEntryId === selectedEntry.id}>
-                  <Sparkles className="h-4 w-4" />
-                  {analyzingEntryId === selectedEntry.id ? "Analyzing..." : "AI analysis"}
-                </Button>
-              ) : undefined}
-            />
-            <div className="space-y-4">
-              <p className="text-base text-textPrimary">{selectedEntry.entryBody}</p>
-              <div className="flex flex-wrap gap-2">
-                <Badge tone="brand">Mood {selectedEntry.mood}/5</Badge>
-                <Badge tone="warning">Pain {selectedEntry.painLevel}/10</Badge>
-                {selectedEntry.tags.map((tag) => (
-                  <Badge key={tag}>{tag}</Badge>
-                ))}
-              </div>
-              {selectedEntry.followUpNeeded ? (
-                <div className="rounded-3xl bg-amber-50 p-4 text-sm text-amber-900">
-                  <p className="font-semibold">Follow-up needed</p>
-                  <p className="mt-1">{selectedEntry.followUpNote}</p>
-                </div>
-              ) : null}
-              {selectedEntry.aiAnalysis ? (
-                <div className="rounded-3xl bg-brandSoft p-5">
-                  <p className="text-sm font-semibold uppercase tracking-[0.18em] text-brandDark">AI analysis</p>
-                  <p className="mt-2 text-xs font-semibold uppercase tracking-[0.14em] text-brandDark/80">
-                    AI-generated | Not a medical diagnosis | Consult your doctor
-                  </p>
-                  <p className="mt-3 text-base text-textPrimary">{selectedEntry.aiAnalysis.summary}</p>
-                  <div className="mt-4 grid gap-3 lg:grid-cols-3">
-                    <div>
-                      <p className="text-sm font-semibold text-textPrimary">Flag for the doctor</p>
-                      <ul className="mt-2 space-y-2 text-sm text-textSecondary">
-                        {selectedEntry.aiAnalysis.doctorFlags.map((item) => (
-                          <li key={item}>- {item}</li>
-                        ))}
-                      </ul>
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-textPrimary">Action steps</p>
-                      <ul className="mt-2 space-y-2 text-sm text-textSecondary">
-                        {selectedEntry.aiAnalysis.actionSteps.map((item) => (
-                          <li key={item}>- {item}</li>
-                        ))}
-                      </ul>
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-textPrimary">Questions to write down</p>
-                      <ul className="mt-2 space-y-2 text-sm text-textSecondary">
-                        {selectedEntry.aiAnalysis.questions.map((item) => (
-                          <li key={item}>- {item}</li>
-                        ))}
-                      </ul>
-                    </div>
+      <div className="space-y-8">
+        <AnimatePresence mode="wait">
+          {selectedEntry ? (
+            <motion.div
+              key={selectedEntry.id}
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+            >
+              <Card className="rounded-[2.5rem] p-8 shadow-calm">
+                <SectionHeader
+                  title={selectedEntry.entryTitle}
+                  titleClassName="responsive-title-lg"
+                  description={`${formatDate(selectedEntry.date)} at ${selectedEntry.time} | ${relativeTime(selectedEntry.createdAt)}`}
+                  action={canAnalyzeEntries ? (
+                    <Button
+                      variant="secondary"
+                      onClick={() => analyzeEntry(selectedEntry)}
+                      disabled={analyzingEntryId === selectedEntry.id}
+                      className="px-6"
+                    >
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      {analyzingEntryId === selectedEntry.id ? "Analyzing..." : "AI analysis"}
+                    </Button>
+                  ) : undefined}
+                />
+                <div className="space-y-8 mt-8">
+                  <div className="prose prose-slate max-w-none">
+                    <p className="text-lg leading-relaxed text-textPrimary font-['Inter']">
+                      {selectedEntry.entryBody}
+                    </p>
                   </div>
-                </div>
-              ) : null}
-            </div>
-          </Card>
-        ) : null}
 
-        <Card>
+                  <div className="flex flex-wrap gap-2 pt-4">
+                    <Badge tone="brand" className="px-3 py-1 text-sm font-semibold">Mood {selectedEntry.mood}/5</Badge>
+                    <Badge tone="warning" className="px-3 py-1 text-sm font-semibold">Pain {selectedEntry.painLevel}/10</Badge>
+                    {selectedEntry.tags.map((tag) => (
+                      <Badge key={tag} className="px-3 py-1 text-sm font-semibold bg-slate-100 text-slate-700">{tag}</Badge>
+                    ))}
+                  </div>
+
+                  {selectedEntry.followUpNeeded ? (
+                    <div className="rounded-[1.5rem] bg-amber-50 border border-amber-100 p-6 text-sm text-amber-900 shadow-sm">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                        <p className="font-['Outfit'] font-bold text-base">Follow-up needed</p>
+                      </div>
+                      <p className="text-base text-amber-900/80 leading-relaxed">{selectedEntry.followUpNote}</p>
+                    </div>
+                  ) : null}
+
+                  {selectedEntry.aiAnalysis ? (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="rounded-[2rem] bg-brandSoft/30 backdrop-blur-md border border-brand/10 p-8 shadow-premium"
+                    >
+                      <div className="flex items-center gap-2 mb-6">
+                        <Sparkles className="h-5 w-5 text-brand" />
+                        <p className="font-['Outfit'] text-sm font-bold uppercase tracking-[0.2em] text-brandDark">AI Analysis</p>
+                      </div>
+
+                      <p className="text-lg text-textPrimary leading-relaxed font-['Inter'] font-medium">
+                        {selectedEntry.aiAnalysis.summary}
+                      </p>
+
+                      <div className="mt-8 grid gap-6 lg:grid-cols-2">
+                        <div className="bg-white/40 rounded-2xl p-6">
+                          <p className="font-['Outfit'] font-bold text-textPrimary mb-3">Flag for the doctor</p>
+                          <ul className="space-y-2 text-sm text-textSecondary">
+                            {selectedEntry.aiAnalysis.doctorFlags.map((item) => (
+                              <li key={item} className="flex items-start gap-2">
+                                <span className="text-brand font-bold">•</span>
+                                {item}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div className="bg-white/40 rounded-2xl p-6">
+                          <p className="font-['Outfit'] font-bold text-textPrimary mb-3">Action steps</p>
+                          <ul className="space-y-2 text-sm text-textSecondary">
+                            {selectedEntry.aiAnalysis.actionSteps.map((item) => (
+                              <li key={item} className="flex items-start gap-2">
+                                <span className="text-success font-bold">•</span>
+                                {item}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+
+                      <div className="mt-6 bg-brandDark text-white rounded-2xl p-6 shadow-lg">
+                        <p className="font-['Outfit'] font-bold mb-3">Questions to write down</p>
+                        <ul className="space-y-2 text-sm text-white/80">
+                          {selectedEntry.aiAnalysis.questions.map((item) => (
+                            <li key={item} className="flex items-start gap-2">
+                              <span className="text-brandSoft font-bold">?</span>
+                              {item}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </motion.div>
+                  ) : null}
+                </div>
+              </Card>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+
+        <Card className="rounded-[2.5rem] p-8">
           <SectionHeader
             title="30-day pattern analysis"
+            titleClassName="font-['Outfit'] text-2xl font-bold"
             description={
               canViewAiInsights
                 ? "Let CareCircle scan recent notes for trends, concerns, and bright spots."
                 : "AI pattern analysis is reserved for caregivers and clinicians."
             }
-            action={canViewAiInsights ? <Button onClick={analyzePatterns} disabled={patternBusy}>{patternBusy ? "Analyzing..." : "Analyze last 30 days"}</Button> : undefined}
+            action={canViewAiInsights ? (
+              <Button onClick={analyzePatterns} disabled={patternBusy} className="px-6">
+                <Sparkles className="h-4 w-4 mr-2" />
+                {patternBusy ? "Analyzing..." : "Analyze patterns"}
+              </Button>
+            ) : undefined}
           />
           {canViewAiInsights && patternReport ? (
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-3xl bg-slate-50 p-4">
-                <p className="font-semibold text-textPrimary">Patterns</p>
-                <ul className="mt-2 space-y-2 text-sm text-textSecondary">
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="grid gap-4 md:grid-cols-2 mt-8"
+            >
+              <div className="rounded-[1.5rem] bg-slate-50 border border-slate-100 p-6 shadow-sm">
+                <p className="font-['Outfit'] font-bold text-textPrimary mb-3">Patterns</p>
+                <ul className="space-y-2 text-sm text-textSecondary">
                   {patternReport.patterns.map((item) => (
-                    <li key={item}>- {item}</li>
+                    <li key={item} className="flex items-start gap-2 leading-relaxed">• {item}</li>
                   ))}
                 </ul>
               </div>
-              <div className="rounded-3xl bg-amber-50 p-4">
-                <p className="font-semibold text-amber-900">Concerns</p>
-                <ul className="mt-2 space-y-2 text-sm text-amber-900/80">
+              <div className="rounded-[1.5rem] bg-amber-50 border border-amber-100 p-6 shadow-sm">
+                <p className="font-['Outfit'] font-bold text-amber-900 mb-3">Concerns</p>
+                <ul className="space-y-2 text-sm text-amber-900/70">
                   {patternReport.concerns.map((item) => (
-                    <li key={item}>- {item}</li>
+                    <li key={item} className="flex items-start gap-2 leading-relaxed">• {item}</li>
                   ))}
                 </ul>
               </div>
-              <div className="rounded-3xl bg-brandSoft p-4">
-                <p className="font-semibold text-brandDark">Doctor topics</p>
-                <ul className="mt-2 space-y-2 text-sm text-textSecondary">
+              <div className="rounded-[1.5rem] bg-brandSoft/40 border border-brand/10 p-6 shadow-sm">
+                <p className="font-['Outfit'] font-bold text-brandDark mb-3">Doctor topics</p>
+                <ul className="space-y-2 text-sm text-brandDark/70">
                   {patternReport.doctor_topics.map((item) => (
-                    <li key={item}>- {item}</li>
+                    <li key={item} className="flex items-start gap-2 leading-relaxed">• {item}</li>
                   ))}
                 </ul>
               </div>
-              <div className="rounded-3xl bg-emerald-50 p-4">
-                <p className="font-semibold text-emerald-800">Positives to celebrate</p>
-                <ul className="mt-2 space-y-2 text-sm text-emerald-800/80">
+              <div className="rounded-[1.5rem] bg-emerald-50 border border-emerald-100 p-6 shadow-sm">
+                <p className="font-['Outfit'] font-bold text-emerald-800 mb-3">Positives to celebrate</p>
+                <ul className="space-y-2 text-sm text-emerald-800/70">
                   {patternReport.positives.map((item) => (
-                    <li key={item}>- {item}</li>
+                    <li key={item} className="flex items-start gap-2 leading-relaxed">• {item}</li>
                   ))}
                 </ul>
               </div>
-            </div>
+            </motion.div>
           ) : canViewAiInsights ? (
-            <div className="rounded-3xl border border-dashed border-borderColor p-8 text-center text-textSecondary">
-              Tap "Analyze last 30 days" to see patterns in plain language.
+            <div className="mt-8 rounded-[1.5rem] border border-dashed border-borderColor p-10 text-center text-textSecondary bg-slate-50/50 transition-colors hover:bg-slate-50">
+              <Sparkles className="h-10 w-10 text-brand/30 mx-auto mb-4" />
+              <p className="text-lg font-medium font-['Outfit']">Discover hidden patterns</p>
+              <p className="mt-2">Tap "Analyze patterns" to see trends in plain language.</p>
             </div>
           ) : (
-            <div className="flex items-start gap-3 rounded-3xl border border-amber-200 bg-amber-50 p-6 text-amber-900">
-              <Lock className="mt-1 h-5 w-5" />
+            <div className="mt-8 flex items-start gap-4 rounded-[1.5rem] border border-amber-200 bg-amber-50 p-6 text-amber-900">
+              <div className="h-10 w-10 rounded-2xl bg-amber-100 flex items-center justify-center shrink-0">
+                <Lock className="h-5 w-5 text-amber-600" />
+              </div>
               <div>
-                <p className="font-semibold">AI note analysis is hidden in this role.</p>
-                <p className="mt-1 text-sm text-amber-900/80">
-                  Family accounts can still read shared notes, but pattern analysis stays with caregivers and clinicians.
+                <p className="font-['Outfit'] font-bold text-lg">AI note analysis is restricted</p>
+                <p className="mt-1 text-base text-amber-900/70 leading-relaxed">
+                  Family accounts can still read shared notes, but pattern analysis stays with caregivers and clinicians for medical privacy.
                 </p>
               </div>
             </div>
@@ -357,30 +450,30 @@ export const JournalPage = () => {
 
       <Modal open={modalOpen && canLogJournal} title="New care journal entry" onClose={closeModal}>
         <form
-          className="grid gap-4"
+          className="grid gap-6 p-2"
           onSubmit={(event) => {
             event.preventDefault();
             if (!event.currentTarget.reportValidity()) return;
             void saveEntry();
           }}
         >
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-6 sm:grid-cols-2">
             <Field label="Date">
-              <Input required type="date" value={form.date} onChange={(event) => setForm((current) => ({ ...current, date: event.target.value }))} />
+              <Input required type="date" value={form.date} className="h-12 rounded-xl" onChange={(event) => setForm((current) => ({ ...current, date: event.target.value }))} />
             </Field>
             <Field label="Time">
-              <Input type="time" value={form.time} onChange={(event) => setForm((current) => ({ ...current, time: event.target.value }))} />
+              <Input type="time" value={form.time} className="h-12 rounded-xl" onChange={(event) => setForm((current) => ({ ...current, time: event.target.value }))} />
             </Field>
           </div>
           <Field label="Entry title">
-            <Input value={form.entryTitle} placeholder="Leave blank and CareCircle will suggest one" onChange={(event) => setForm((current) => ({ ...current, entryTitle: event.target.value }))} />
+            <Input value={form.entryTitle} className="h-12 rounded-xl" placeholder="Leave blank and CareCircle will suggest one" onChange={(event) => setForm((current) => ({ ...current, entryTitle: event.target.value }))} />
           </Field>
           <Field label="What happened?">
-            <Textarea required value={form.entryBody} placeholder="Describe what you observed in plain words..." onChange={(event) => setForm((current) => ({ ...current, entryBody: event.target.value }))} />
+            <Textarea required value={form.entryBody} className="min-h-[160px] rounded-[1.25rem] p-4" placeholder="Describe what you observed in plain words..." onChange={(event) => setForm((current) => ({ ...current, entryBody: event.target.value }))} />
           </Field>
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-6 sm:grid-cols-3">
             <Field label="Mood">
-              <Select value={String(form.mood)} onChange={(event) => setForm((current) => ({ ...current, mood: Number(event.target.value) }))}>
+              <Select value={String(form.mood)} className="h-12 rounded-xl" onChange={(event) => setForm((current) => ({ ...current, mood: Number(event.target.value) }))}>
                 <option value="1">1 - Very low</option>
                 <option value="2">2 - Low</option>
                 <option value="3">3 - Neutral</option>
@@ -389,10 +482,10 @@ export const JournalPage = () => {
               </Select>
             </Field>
             <Field label="Pain level">
-              <Input type="number" min="0" max="10" value={form.painLevel} onChange={(event) => setForm((current) => ({ ...current, painLevel: Number(event.target.value) }))} />
+              <Input type="number" min="0" max="10" value={form.painLevel} className="h-12 rounded-xl" onChange={(event) => setForm((current) => ({ ...current, painLevel: Number(event.target.value) }))} />
             </Field>
             <Field label="Severity">
-              <Select value={form.severity} onChange={(event) => setForm((current) => ({ ...current, severity: event.target.value }))}>
+              <Select value={form.severity} className="h-12 rounded-xl" onChange={(event) => setForm((current) => ({ ...current, severity: event.target.value }))}>
                 <option value="low">Just noting</option>
                 <option value="medium">Worth watching</option>
                 <option value="high">Concerning</option>
@@ -405,10 +498,14 @@ export const JournalPage = () => {
               {["fall", "confusion", "appetite", "sleep", "mood", "pain", "bathroom", "behavior", "energy", "skin", "breathing"].map((tag) => {
                 const selected = form.tags.includes(tag);
                 return (
-                  <button
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
                     key={tag}
                     type="button"
-                    className={`rounded-full px-4 py-2 text-sm font-semibold ${selected ? "bg-brand text-white" : "bg-slate-100 text-textSecondary"}`}
+                    className={`rounded-full px-5 py-2.5 text-sm font-bold transition-all duration-300 ${
+                      selected ? "bg-brand text-white shadow-brand shadow-md" : "bg-slate-100 text-textSecondary border border-transparent hover:border-brand/20"
+                    }`}
                     onClick={() =>
                       setForm((current) => ({
                         ...current,
@@ -417,29 +514,41 @@ export const JournalPage = () => {
                     }
                   >
                     {tag}
-                  </button>
+                  </motion.button>
                 );
               })}
             </div>
           </Field>
-          <div className="flex items-center justify-between rounded-3xl bg-slate-50 p-4">
+          <div className="flex items-center justify-between rounded-3xl bg-slate-50 p-6 border border-slate-100">
             <div>
-              <p className="font-semibold text-textPrimary">Does this need follow-up?</p>
+              <p className="font-['Outfit'] font-bold text-textPrimary text-lg">Does this need follow-up?</p>
               <p className="text-sm text-textSecondary">Turn this on if you want a reminder for the next visit.</p>
             </div>
             <Toggle checked={form.followUpNeeded} onChange={(value) => setForm((current) => ({ ...current, followUpNeeded: value }))} />
           </div>
           {form.followUpNeeded ? (
-            <Field label="Follow-up note">
-              <Input required={form.followUpNeeded} value={form.followUpNote} placeholder="Example: Mention the increased confusion at neurology" onChange={(event) => setForm((current) => ({ ...current, followUpNote: event.target.value }))} />
-            </Field>
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              key="followUp"
+            >
+              <Field label="Follow-up note">
+                <Input
+                  required={form.followUpNeeded}
+                  value={form.followUpNote}
+                  className="h-12 rounded-xl"
+                  placeholder="Example: Mention the increased confusion at neurology"
+                  onChange={(event) => setForm((current) => ({ ...current, followUpNote: event.target.value }))}
+                />
+              </Field>
+            </motion.div>
           ) : null}
-          <div className="flex justify-end gap-3">
-            <Button type="button" variant="ghost" onClick={closeModal} disabled={saveBusy}>Cancel</Button>
-            <Button type="submit" disabled={saveBusy}>{saveBusy ? "Saving..." : "Save entry"}</Button>
+          <div className="flex justify-end gap-3 pt-6">
+            <Button type="button" variant="ghost" className="px-8" onClick={closeModal} disabled={saveBusy}>Cancel</Button>
+            <Button type="submit" className="px-8" disabled={saveBusy}>{saveBusy ? "Saving..." : "Save entry"}</Button>
           </div>
         </form>
       </Modal>
-    </div>
+    </motion.div>
   );
 };

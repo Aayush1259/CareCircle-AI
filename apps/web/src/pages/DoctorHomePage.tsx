@@ -15,29 +15,29 @@ export const DoctorHomePage = () => {
   const recentNotes = data.careJournal.slice(0, 3);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="space-y-6 sm:space-y-8">
+      <div className="flex flex-wrap items-center justify-between gap-2.5 sm:gap-3">
         <div>
           <p className="eyebrow">Clinical view</p>
-          <h1 className="mt-2 text-3xl font-bold text-textPrimary">A clearer clinical snapshot.</h1>
+          <h1 className="responsive-title-lg mt-2 text-textPrimary">A clearer clinical snapshot.</h1>
         </div>
         <Badge tone="brand">{roleLabel(viewerRole)}</Badge>
       </div>
 
-      <Card className="overflow-hidden bg-gradient-to-r from-slate-950 to-brandDark text-white shadow-calm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-white/70">Patient overview</p>
-            <h2 className="mt-2 text-3xl font-bold">{patient.preferredName ?? patient.name}</h2>
-            <p className="mt-2 text-base leading-7 text-white/85">
+      <Card className="hero-shell hero-card-pad overflow-hidden bg-[linear-gradient(135deg,rgba(15,23,42,0.98),rgba(55,48,163,0.94),rgba(99,102,241,0.9))] text-white shadow-calm">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <span className="glass-chip border-white/15 bg-white/10 text-white/80">Patient overview</span>
+            <h2 className="hero-headline mt-4">{patient.preferredName ?? patient.name}</h2>
+            <p className="hero-body-copy mt-3 text-white/84">
               {calcAge(patient.dateOfBirth)} years old - {patient.primaryDiagnosis}
             </p>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <Link to="/journal" className="inline-flex min-h-12 items-center justify-center rounded-2xl bg-white px-4 py-3 text-[0.95rem] font-semibold text-brandDark shadow-sm transition hover:bg-white/95">
+          <div className="hero-action-row w-full sm:w-auto lg:max-w-md lg:justify-end">
+            <Link to="/journal" className="glass-panel inline-flex min-h-[46px] items-center justify-center rounded-[1.35rem] px-4 py-3 text-[0.92rem] font-semibold text-brandDark transition hover:bg-white/92 sm:min-h-[50px] sm:w-auto sm:text-[0.95rem]">
               Open journal
             </Link>
-            <Link to="/appointments" className="inline-flex min-h-12 items-center justify-center rounded-2xl bg-white px-4 py-3 text-[0.95rem] font-semibold text-brandDark shadow-sm transition hover:bg-white/95">
+            <Link to="/appointments" className="glass-panel inline-flex min-h-[46px] items-center justify-center rounded-[1.35rem] px-4 py-3 text-[0.92rem] font-semibold text-brandDark transition hover:bg-white/92 sm:min-h-[50px] sm:w-auto sm:text-[0.95rem]">
               Upcoming visits
             </Link>
           </div>
@@ -48,18 +48,18 @@ export const DoctorHomePage = () => {
         <Card>
           <div className="flex items-center justify-between">
             <Stethoscope className="h-5 w-5 text-brandDark" />
-            <span className="text-sm font-semibold text-textSecondary">Primary doctor</span>
+            <span className="text-[0.76rem] font-semibold uppercase tracking-[0.16em] text-textSecondary sm:text-sm sm:normal-case sm:tracking-normal">Primary doctor</span>
           </div>
-          <p className="mt-4 text-xl font-bold text-textPrimary">{patient.primaryDoctorName}</p>
-          <p className="mt-1 text-sm text-textSecondary">{patient.primaryDoctorPhone}</p>
+          <p className="mt-4 text-lg font-bold text-textPrimary sm:text-xl">{patient.primaryDoctorName}</p>
+          <p className="mt-1 text-[0.85rem] text-textSecondary sm:text-sm">{patient.primaryDoctorPhone}</p>
         </Card>
         <Card>
           <div className="flex items-center justify-between">
             <CalendarDays className="h-5 w-5 text-brandDark" />
-            <span className="text-sm font-semibold text-textSecondary">Next visit</span>
+            <span className="text-[0.76rem] font-semibold uppercase tracking-[0.16em] text-textSecondary sm:text-sm sm:normal-case sm:tracking-normal">Next visit</span>
           </div>
-          <p className="mt-4 text-xl font-bold text-textPrimary">{dashboard.nextAppointment?.doctorName ?? "None scheduled"}</p>
-          <p className="mt-1 text-sm text-textSecondary">
+          <p className="mt-4 text-lg font-bold text-textPrimary sm:text-xl">{dashboard.nextAppointment?.doctorName ?? "None scheduled"}</p>
+          <p className="mt-1 text-[0.85rem] text-textSecondary sm:text-sm">
             {dashboard.nextAppointment
               ? `${formatDate(dashboard.nextAppointment.appointmentDate)} at ${dashboard.nextAppointment.appointmentTime}`
               : "No visit is queued yet."}
@@ -68,18 +68,18 @@ export const DoctorHomePage = () => {
         <Card>
           <div className="flex items-center justify-between">
             <HeartPulse className="h-5 w-5 text-brandDark" />
-            <span className="text-sm font-semibold text-textSecondary">Vitals captured</span>
+            <span className="text-[0.76rem] font-semibold uppercase tracking-[0.16em] text-textSecondary sm:text-sm sm:normal-case sm:tracking-normal">Vitals captured</span>
           </div>
-          <p className="mt-4 text-3xl font-bold text-textPrimary">{data.healthVitals.length}</p>
-          <p className="mt-1 text-sm text-textSecondary">recent readings</p>
+          <p className="mt-4 text-2xl font-bold text-textPrimary sm:text-3xl">{data.healthVitals.length}</p>
+          <p className="mt-1 text-[0.85rem] text-textSecondary sm:text-sm">recent readings</p>
         </Card>
         <Card>
           <div className="flex items-center justify-between">
             <Activity className="h-5 w-5 text-brandDark" />
-            <span className="text-sm font-semibold text-textSecondary">Active meds</span>
+            <span className="text-[0.76rem] font-semibold uppercase tracking-[0.16em] text-textSecondary sm:text-sm sm:normal-case sm:tracking-normal">Active meds</span>
           </div>
-          <p className="mt-4 text-3xl font-bold text-textPrimary">{data.medications.filter((item) => item.isActive).length}</p>
-          <p className="mt-1 text-sm text-textSecondary">current list</p>
+          <p className="mt-4 text-2xl font-bold text-textPrimary sm:text-3xl">{data.medications.filter((item) => item.isActive).length}</p>
+          <p className="mt-1 text-[0.85rem] text-textSecondary sm:text-sm">current list</p>
         </Card>
       </div>
 
@@ -87,17 +87,17 @@ export const DoctorHomePage = () => {
         <Card>
           <SectionHeader title="Clinical snapshots" description="Quick access to the most useful patient context." />
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="rounded-3xl bg-brandSoft/55 p-4">
-              <p className="text-sm font-semibold text-textPrimary">Blood type</p>
-              <p className="mt-1 text-2xl font-bold text-brandDark">{patient.bloodType}</p>
+            <div className="section-well rounded-[1.6rem] p-4 sm:rounded-[2rem] sm:p-5">
+              <p className="text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-textPrimary sm:text-sm sm:normal-case sm:tracking-normal">Blood type</p>
+              <p className="mt-2 text-xl font-bold text-brandDark sm:text-2xl">{patient.bloodType}</p>
             </div>
-            <div className="rounded-3xl bg-slate-50 p-4">
-              <p className="text-sm font-semibold text-textPrimary">Allergies</p>
-              <p className="mt-1 text-sm leading-7 text-textSecondary">{patient.allergies.join(", ") || "None listed"}</p>
+            <div className="section-well rounded-[1.6rem] p-4 sm:rounded-[2rem] sm:p-5">
+              <p className="text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-textPrimary sm:text-sm sm:normal-case sm:tracking-normal">Allergies</p>
+              <p className="mt-2 text-[0.88rem] leading-6 text-textSecondary sm:text-sm sm:leading-7">{patient.allergies.join(", ") || "None listed"}</p>
             </div>
-            <div className="rounded-3xl bg-slate-50 p-4">
-              <p className="text-sm font-semibold text-textPrimary">Mobility</p>
-              <p className="mt-1 text-sm leading-7 text-textSecondary">{patient.mobilityLevel}</p>
+            <div className="section-well rounded-[1.6rem] p-4 sm:rounded-[2rem] sm:p-5">
+              <p className="text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-textPrimary sm:text-sm sm:normal-case sm:tracking-normal">Mobility</p>
+              <p className="mt-2 text-[0.88rem] leading-6 text-textSecondary sm:text-sm sm:leading-7">{patient.mobilityLevel}</p>
             </div>
           </div>
         </Card>
@@ -110,10 +110,10 @@ export const DoctorHomePage = () => {
           <div className="space-y-3">
             {recentNotes.length ? (
               recentNotes.map((entry) => (
-                <div key={entry.id} className="rounded-3xl border border-borderColor p-4">
-                  <p className="font-semibold text-textPrimary">{entry.entryTitle}</p>
-                  <p className="mt-1 text-sm text-textSecondary">{relativeTime(entry.createdAt)}</p>
-                  <p className="mt-2 text-sm leading-7 text-textSecondary">{entry.entryBody}</p>
+                <div key={entry.id} className="rounded-[1.6rem] border border-borderColor/80 p-4 sm:rounded-[2rem] sm:p-5">
+                  <p className="text-[0.95rem] font-semibold text-textPrimary sm:text-base">{entry.entryTitle}</p>
+                  <p className="mt-1 text-[0.82rem] text-textSecondary sm:text-sm">{relativeTime(entry.createdAt)}</p>
+                  <p className="mt-2 text-[0.88rem] leading-6 text-textSecondary sm:text-sm sm:leading-7">{entry.entryBody}</p>
                 </div>
               ))
             ) : (
@@ -129,11 +129,11 @@ export const DoctorHomePage = () => {
           <div className="space-y-3">
             {recentVitals.length ? (
               recentVitals.map((vital) => (
-                <div key={vital.id} className="rounded-3xl border border-borderColor p-4">
-                  <p className="font-semibold text-textPrimary">
+                <div key={vital.id} className="rounded-[1.6rem] border border-borderColor/80 p-4 sm:rounded-[2rem] sm:p-5">
+                  <p className="text-[0.95rem] font-semibold text-textPrimary sm:text-base">
                     {vital.date} · {vital.time}
                   </p>
-                  <p className="mt-1 text-sm text-textSecondary">
+                  <p className="mt-1 text-[0.85rem] leading-6 text-textSecondary sm:text-sm">
                     BP {vital.bloodPressureSystolic ?? "--"}/{vital.bloodPressureDiastolic ?? "--"}, HR {vital.heartRate ?? "--"}, Glucose{" "}
                     {vital.bloodGlucose ?? "--"}
                   </p>
@@ -154,15 +154,15 @@ export const DoctorHomePage = () => {
               { icon: CalendarDays, label: "Appointments", to: "/appointments" },
               { icon: Shield, label: "Emergency", to: "/emergency" },
             ].map(({ icon: Icon, label, to }) => (
-              <Link key={label} to={to} className="rounded-3xl border border-borderColor bg-surface p-4 transition hover:bg-brandSoft/35">
+              <Link key={label} to={to} className="os-shell-soft rounded-[1.6rem] p-4 transition hover:bg-brandSoft/35 sm:rounded-[2rem] sm:p-5">
                 <Icon className="h-5 w-5 text-brandDark" />
-                <p className="mt-3 text-base font-semibold text-textPrimary">{label}</p>
+                <p className="mt-3 text-[0.95rem] font-semibold text-textPrimary sm:text-base">{label}</p>
               </Link>
             ))}
           </div>
-          <div className="mt-5 rounded-3xl bg-brandSoft/55 p-4">
-            <p className="text-sm font-semibold text-textPrimary">Clinical access</p>
-            <p className="mt-1 text-sm text-textSecondary">
+          <div className="section-well mt-5 rounded-[1.6rem] p-4 sm:rounded-[2rem] sm:p-5">
+            <p className="text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-textPrimary sm:text-sm sm:normal-case sm:tracking-normal">Clinical access</p>
+            <p className="mt-2 text-[0.9rem] leading-6 text-textSecondary sm:text-sm">
               This view keeps the focus on review, monitoring, and note-taking so the interface stays calm.
             </p>
           </div>

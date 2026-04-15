@@ -91,10 +91,10 @@ export const AccessManager = () => {
   if (!canManageFamily) {
     return (
       <Card>
-        <SectionHeader title="Team access control" description="Only the primary caregiver can change granular access." />
-        <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5">
-          <p className="font-semibold text-amber-900">This account cannot manage team access.</p>
-          <p className="mt-2 text-sm text-amber-900/80">
+        <SectionHeader title="Team Permissions" description="Only the primary caregiver can change granular access." />
+        <div className="rounded-[1.7rem] border border-amber-200 bg-amber-50 p-4 sm:rounded-[2rem] sm:p-5">
+          <p className="text-[0.95rem] font-semibold text-amber-900 sm:text-base">This account cannot manage team access.</p>
+          <p className="mt-2 text-[0.85rem] text-amber-900/80 sm:text-sm">
             Granular permissions and data access controls are restricted to ensure patient privacy.
           </p>
         </div>
@@ -159,12 +159,12 @@ export const AccessManager = () => {
   return (
     <Card>
       <SectionHeader
-        title="Team access control"
+        title="Team Permissions"
         description="Manage exactly what each care team member can see and do."
       />
       <div className="grid gap-3">
         {accessRecords.length === 0 ? (
-          <p className="text-sm text-textSecondary">You are the only person with access to this record.</p>
+          <p className="text-[0.85rem] text-textSecondary sm:text-sm">You are the only person with access to this record.</p>
         ) : null}
 
         {accessRecords.map((record) => {
@@ -172,29 +172,29 @@ export const AccessManager = () => {
           const isRevoked = record.joinStatus === "revoked";
 
           return (
-            <div key={record.id} className="overflow-hidden rounded-3xl border border-borderColor bg-surface transition-all">
+            <div key={record.id} className="overflow-hidden rounded-[1.7rem] border border-borderColor bg-surface transition-all sm:rounded-[2rem]">
               <button
                 type="button"
-                className="flex w-full items-center justify-between p-4 text-left transition hover:bg-slate-50"
+                className="flex w-full items-center justify-between gap-3 p-3.5 text-left transition hover:bg-slate-50 sm:p-4"
                 onClick={() => setExpandedRecord(isExpanded ? null : record.id)}
               >
-                <div>
+                <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <p className="text-base font-semibold text-textPrimary">{record.name}</p>
+                    <p className="truncate text-[0.95rem] font-semibold text-textPrimary sm:text-base">{record.name}</p>
                     {isRevoked ? (
-                      <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
+                      <span className="rounded-full bg-red-100 px-2 py-0.5 text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-red-700 sm:text-xs sm:normal-case sm:tracking-normal">
                         Access Revoked
                       </span>
                     ) : record.joinStatus === "pending" ? (
-                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-amber-700 sm:text-xs sm:normal-case sm:tracking-normal">
                         Pending Invite
                       </span>
                     ) : null}
                   </div>
-                  <p className="text-sm text-textSecondary">
+                  <p className="truncate text-[0.82rem] text-textSecondary sm:text-sm">
                     {record.email} • {roleLabel(record.accessRole)}
                   </p>
-                  <p className="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-textSecondary">
+                  <p className="mt-1 text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-textSecondary sm:text-xs">
                     {permissionTierLabel(record)}
                   </p>
                 </div>
@@ -206,11 +206,11 @@ export const AccessManager = () => {
               </button>
 
               {isExpanded ? (
-                <div className="border-t border-borderColor bg-slate-50 p-4">
-                  <div className="mb-6 flex items-center justify-between rounded-xl bg-white p-4 shadow-sm">
-                    <div>
-                      <p className="font-semibold text-textPrimary">Account status</p>
-                      <p className="text-sm text-textSecondary">
+                <div className="border-t border-borderColor bg-slate-50 p-3.5 sm:p-4">
+                  <div className="mb-5 flex flex-col gap-4 rounded-[1.25rem] bg-white p-4 shadow-sm sm:mb-6 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-[0.95rem] font-semibold text-textPrimary sm:text-base">Account status</p>
+                      <p className="text-[0.85rem] text-textSecondary sm:text-sm">
                         {isRevoked
                           ? "This user is suspended and cannot access the patient record."
                           : record.joinStatus === "pending"
@@ -221,16 +221,18 @@ export const AccessManager = () => {
                     {isRevoked ? (
                       <Button
                         variant="secondary"
+                        className="w-full sm:w-auto"
                         onClick={() => void updateJoinStatus(record, "active")}
                         disabled={savingRecord === record.id}
                       >
                         Restore Access
                       </Button>
                     ) : (
-                      <div className="flex flex-wrap gap-2">
+                      <div className="grid gap-2 sm:flex sm:flex-wrap">
                         {record.joinStatus === "pending" ? (
                           <Button
                             variant="secondary"
+                            className="w-full sm:w-auto"
                             onClick={() => void resendInvite(record)}
                             disabled={savingRecord === record.id}
                           >
@@ -239,6 +241,7 @@ export const AccessManager = () => {
                         ) : null}
                         <Button
                           variant="danger"
+                          className="w-full sm:w-auto"
                           onClick={() => void updateJoinStatus(record, "revoked")}
                           disabled={savingRecord === record.id}
                         >
@@ -249,23 +252,23 @@ export const AccessManager = () => {
                     )}
                   </div>
 
-                  <div className={`grid gap-6 sm:grid-cols-2 ${isRevoked ? "pointer-events-none opacity-50 grayscale" : ""}`}>
+                  <div className={`grid gap-4 sm:gap-5 sm:grid-cols-2 ${isRevoked ? "pointer-events-none opacity-50 grayscale" : ""}`}>
                     {Object.entries(permissionGroups).map(([groupKey, group]) => {
                       const visibleItems = group.items.filter((item) => !item.roles || item.roles.includes(record.accessRole));
                       if (!visibleItems.length) return null;
 
                       return (
-                        <div key={groupKey} className="space-y-3">
-                          <p className="font-semibold text-textPrimary">{group.label}</p>
-                          <div className="rounded-2xl border border-borderColor bg-white">
+                        <div key={groupKey} className="space-y-2.5 sm:space-y-3">
+                          <p className="text-[0.85rem] font-semibold uppercase tracking-[0.12em] text-textPrimary sm:text-base sm:normal-case sm:tracking-normal">{group.label}</p>
+                          <div className="rounded-[1.35rem] border border-borderColor bg-white sm:rounded-2xl">
                             {visibleItems.map((item, index) => (
                               <div
                                 key={item.key}
-                                className={`flex items-center justify-between p-3 ${
+                                className={`flex items-center justify-between gap-3 p-3 ${
                                   index < visibleItems.length - 1 ? "border-b border-borderColor" : ""
                                 }`}
                               >
-                                <p className="text-sm text-textPrimary">{item.label}</p>
+                                <p className="text-[0.82rem] leading-5 text-textPrimary sm:text-sm">{item.label}</p>
                                 <Toggle
                                   checked={Boolean(record.permissions[item.key])}
                                   onChange={(value) => void togglePermission(record, item.key, value)}
@@ -280,9 +283,9 @@ export const AccessManager = () => {
                   </div>
 
                   {record.accessRole === "doctor" && !record.permissions.canViewAuditLog ? (
-                    <div className="mt-4 flex items-start gap-3 rounded-2xl bg-brandSoft/30 p-4 text-brandDark">
+                    <div className="mt-4 flex items-start gap-3 rounded-[1.35rem] bg-brandSoft/30 p-4 text-brandDark sm:rounded-2xl">
                       <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0" />
-                      <p className="text-sm">
+                      <p className="text-[0.85rem] leading-6 sm:text-sm">
                         As a clinical provider, this user can review shared care data and write clinical notes, but they cannot see the
                         family workspace, billing details, or audit logs.
                       </p>

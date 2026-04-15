@@ -25,29 +25,29 @@ export const FamilyHomePage = () => {
   ].filter(Boolean) as Array<{ icon: typeof MessageCircle; label: string; to: string }>;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="space-y-6 sm:space-y-8">
+      <div className="flex flex-wrap items-center justify-between gap-2.5 sm:gap-3">
         <div>
           <p className="eyebrow">Family view</p>
-          <h1 className="mt-2 text-3xl font-bold text-textPrimary">A simpler space for helping out.</h1>
+          <h1 className="responsive-title-lg mt-2 text-textPrimary">A simpler space for helping out.</h1>
         </div>
         <Badge tone="brand">{roleLabel(viewerRole)}</Badge>
       </div>
 
-      <Card className="overflow-hidden bg-gradient-to-r from-brandDark to-brand text-white shadow-calm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <Card className="hero-shell hero-card-pad overflow-hidden text-white shadow-calm">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-white/75">Family hub</p>
-            <h2 className="mt-2 text-3xl font-bold">{patient.preferredName ?? patient.name}</h2>
-            <p className="mt-2 max-w-2xl text-base leading-7 text-white/85">
+            <span className="glass-chip border-white/15 bg-white/12 text-white/82">Family hub</span>
+            <h2 className="hero-headline mt-4">{patient.preferredName ?? patient.name}</h2>
+            <p className="hero-body-copy mt-3 max-w-2xl text-white/84">
               Keep up with the essentials, share updates, and jump into the spaces that matter most.
             </p>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <Link to="/medications" className="inline-flex min-h-12 items-center justify-center rounded-2xl bg-white px-4 py-3 text-[0.95rem] font-semibold text-brandDark shadow-sm transition hover:bg-white/95">
+          <div className="hero-action-row w-full sm:w-auto lg:max-w-md lg:justify-end">
+            <Link to="/medications" className="glass-panel inline-flex min-h-[46px] items-center justify-center rounded-[1.35rem] px-4 py-3 text-[0.92rem] font-semibold text-brandDark transition hover:bg-white/92 sm:min-h-[50px] sm:w-auto sm:text-[0.95rem]">
               Medications
             </Link>
-            <Link to="/family" className="inline-flex min-h-12 items-center justify-center rounded-2xl bg-white px-4 py-3 text-[0.95rem] font-semibold text-brandDark shadow-sm transition hover:bg-white/95">
+            <Link to="/family" className="glass-panel inline-flex min-h-[46px] items-center justify-center rounded-[1.35rem] px-4 py-3 text-[0.92rem] font-semibold text-brandDark transition hover:bg-white/92 sm:min-h-[50px] sm:w-auto sm:text-[0.95rem]">
               Family chat
             </Link>
           </div>
@@ -58,12 +58,12 @@ export const FamilyHomePage = () => {
         <Card>
           <div className="flex items-center justify-between">
             <Pill className="h-5 w-5 text-brandDark" />
-            <span className="text-sm font-semibold text-textSecondary">Meds Today</span>
+            <span className="text-[0.76rem] font-semibold uppercase tracking-[0.16em] text-textSecondary sm:text-sm sm:normal-case sm:tracking-normal">Meds today</span>
           </div>
-          <p className="mt-4 text-3xl font-bold text-textPrimary">
+          <p className="mt-4 text-2xl font-bold text-textPrimary sm:text-3xl">
             {dashboard.medicationProgress.taken} of {dashboard.medicationProgress.total}
           </p>
-          <p className="mt-1 text-sm text-textSecondary">taken today</p>
+          <p className="mt-1 text-[0.85rem] text-textSecondary sm:text-sm">taken today</p>
           <div className="mt-4">
             <ProgressBar value={dashboard.medicationProgress.adherenceScore} />
           </div>
@@ -71,18 +71,18 @@ export const FamilyHomePage = () => {
         <Card>
           <div className="flex items-center justify-between">
             <ClipboardCheck className="h-5 w-5 text-brandDark" />
-            <span className="text-sm font-semibold text-textSecondary">Open tasks</span>
+            <span className="text-[0.76rem] font-semibold uppercase tracking-[0.16em] text-textSecondary sm:text-sm sm:normal-case sm:tracking-normal">Open tasks</span>
           </div>
-          <p className="mt-4 text-3xl font-bold text-textPrimary">{activeTasks.length}</p>
-          <p className="mt-1 text-sm text-textSecondary">items still in motion</p>
+          <p className="mt-4 text-2xl font-bold text-textPrimary sm:text-3xl">{activeTasks.length}</p>
+          <p className="mt-1 text-[0.85rem] text-textSecondary sm:text-sm">items still in motion</p>
         </Card>
         <Card>
           <div className="flex items-center justify-between">
             <CalendarDays className="h-5 w-5 text-brandDark" />
-            <span className="text-sm font-semibold text-textSecondary">Next visit</span>
+            <span className="text-[0.76rem] font-semibold uppercase tracking-[0.16em] text-textSecondary sm:text-sm sm:normal-case sm:tracking-normal">Next visit</span>
           </div>
-          <p className="mt-4 text-xl font-bold text-textPrimary">{dashboard.nextAppointment?.doctorName ?? "No visit scheduled"}</p>
-          <p className="mt-1 text-sm text-textSecondary">
+          <p className="mt-4 text-lg font-bold text-textPrimary sm:text-xl">{dashboard.nextAppointment?.doctorName ?? "No visit scheduled"}</p>
+          <p className="mt-1 text-[0.85rem] text-textSecondary sm:text-sm">
             {dashboard.nextAppointment
               ? `${formatDate(dashboard.nextAppointment.appointmentDate)} at ${dashboard.nextAppointment.appointmentTime}`
               : "Add a visit when one is booked."}
@@ -91,10 +91,10 @@ export const FamilyHomePage = () => {
         <Card>
           <div className="flex items-center justify-between">
             <HeartHandshake className="h-5 w-5 text-brandDark" />
-            <span className="text-sm font-semibold text-textSecondary">Family activity</span>
+            <span className="text-[0.76rem] font-semibold uppercase tracking-[0.16em] text-textSecondary sm:text-sm sm:normal-case sm:tracking-normal">Family activity</span>
           </div>
-          <p className="mt-4 text-3xl font-bold text-textPrimary">{activity.length}</p>
-          <p className="mt-1 text-sm text-textSecondary">recent updates</p>
+          <p className="mt-4 text-2xl font-bold text-textPrimary sm:text-3xl">{activity.length}</p>
+          <p className="mt-1 text-[0.85rem] text-textSecondary sm:text-sm">recent updates</p>
         </Card>
       </div>
 
@@ -103,15 +103,15 @@ export const FamilyHomePage = () => {
           <SectionHeader title="What you can do here" description="This view keeps the work focused and easy to scan." />
           <div className="grid gap-3 sm:grid-cols-2">
             {quickLinks.map(({ icon: Icon, label, to }) => (
-              <Link key={label} to={to} className="rounded-3xl border border-borderColor bg-surface p-4 transition hover:bg-brandSoft/35">
+              <Link key={label} to={to} className="os-shell-soft rounded-[1.6rem] p-4 transition hover:bg-brandSoft/35 sm:rounded-[2rem] sm:p-5">
                 <Icon className="h-5 w-5 text-brandDark" />
-                <p className="mt-3 text-base font-semibold text-textPrimary">{label}</p>
+                <p className="mt-3 text-[0.95rem] font-semibold text-textPrimary sm:text-base">{label}</p>
               </Link>
             ))}
           </div>
-          <div className="mt-5 rounded-3xl bg-brandSoft/55 p-4">
-            <p className="text-sm font-semibold text-textPrimary">Permissions</p>
-            <p className="mt-1 text-sm text-textSecondary">
+          <div className="section-well mt-5 rounded-[1.6rem] p-4 sm:rounded-[2rem] sm:p-5">
+            <p className="text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-textPrimary sm:text-sm sm:normal-case sm:tracking-normal">Permissions</p>
+            <p className="mt-2 text-[0.9rem] leading-6 text-textSecondary sm:text-sm">
               You currently have {permissionTier} access for this patient, so CareCircle only shows the spaces you are invited to use.
             </p>
           </div>
@@ -122,11 +122,11 @@ export const FamilyHomePage = () => {
           <div className="space-y-3">
             {activity.length ? (
               activity.map((event) => (
-                <div key={event.id} className="rounded-3xl border border-borderColor p-4">
-                  <p className="font-semibold text-textPrimary">
+                <div key={event.id} className="rounded-[1.6rem] border border-borderColor/80 p-4 sm:rounded-[2rem] sm:p-5">
+                  <p className="text-[0.95rem] font-semibold leading-6 text-textPrimary sm:text-base">
                     {event.actorName} {event.description}
                   </p>
-                  <p className="mt-1 text-sm text-textSecondary">{relativeTime(event.createdAt)}</p>
+                  <p className="mt-1 text-[0.82rem] text-textSecondary sm:text-sm">{relativeTime(event.createdAt)}</p>
                 </div>
               ))
             ) : (
@@ -134,18 +134,18 @@ export const FamilyHomePage = () => {
             )}
           </div>
 
-          <div className="mt-5 rounded-3xl border border-borderColor p-4">
-            <p className="font-semibold text-textPrimary">Family messages</p>
+          <div className="mt-5 rounded-[1.6rem] border border-borderColor/80 p-4 sm:rounded-[2rem] sm:p-5">
+            <p className="text-[0.95rem] font-semibold text-textPrimary sm:text-base">Family messages</p>
             <div className="mt-3 space-y-3">
               {messagePreview.length ? (
                 messagePreview.map((message) => (
                   <div key={message.id} className="rounded-2xl bg-slate-50 p-3">
-                    <p className="text-sm font-semibold text-textPrimary">{message.userName}</p>
-                    <p className="mt-1 text-sm text-textSecondary">{message.messageText}</p>
+                    <p className="text-[0.85rem] font-semibold text-textPrimary sm:text-sm">{message.userName}</p>
+                    <p className="mt-1 text-[0.85rem] leading-6 text-textSecondary sm:text-sm">{message.messageText}</p>
                   </div>
                 ))
               ) : (
-                <p className="text-sm text-textSecondary">No family messages yet.</p>
+                <p className="text-[0.85rem] text-textSecondary sm:text-sm">No family messages yet.</p>
               )}
             </div>
           </div>
@@ -156,23 +156,23 @@ export const FamilyHomePage = () => {
         <SectionHeader title="Upcoming appointments" description="The next check-ins are easy to prepare for." />
         <div className="grid gap-3 lg:grid-cols-2">
           {upcomingAppointments.map((appointment) => (
-            <div key={appointment.id} className="rounded-3xl border border-borderColor p-4">
-              <p className="font-bold text-textPrimary">{appointment.doctorName}</p>
-              <p className="text-sm text-textSecondary">{appointment.specialty}</p>
-              <p className="mt-2 text-sm text-textPrimary">
+            <div key={appointment.id} className="rounded-[1.6rem] border border-borderColor/80 p-4 sm:rounded-[2rem] sm:p-5">
+              <p className="text-[0.98rem] font-bold text-textPrimary sm:text-lg">{appointment.doctorName}</p>
+              <p className="text-[0.85rem] text-textSecondary sm:text-sm">{appointment.specialty}</p>
+              <p className="mt-2 text-[0.88rem] text-textPrimary sm:text-sm">
                 {formatDate(appointment.appointmentDate)} at {appointment.appointmentTime}
               </p>
-              <p className="mt-1 text-sm text-textSecondary">{appointment.clinicName}</p>
-              <div className="mt-3 flex flex-wrap gap-2">
+              <p className="mt-1 text-[0.85rem] text-textSecondary sm:text-sm">{appointment.clinicName}</p>
+              <div className="mt-3 grid gap-2 sm:flex sm:flex-wrap">
                 <a
                   href={`https://www.google.com/maps/search/${encodeURIComponent(appointment.address)}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-borderColor bg-surface px-4 py-3 text-[0.95rem] font-semibold text-textPrimary shadow-sm transition hover:bg-slate-50"
+                  className="inline-flex min-h-[46px] items-center justify-center rounded-[1.2rem] border border-borderColor bg-surface px-4 py-3 text-[0.9rem] font-semibold text-textPrimary shadow-sm transition hover:bg-slate-50 sm:min-h-12 sm:rounded-2xl sm:text-[0.95rem]"
                 >
                   Get Directions
                 </a>
-                <Link to="/appointments" className="inline-flex min-h-12 items-center justify-center rounded-2xl bg-brandSoft px-4 py-3 text-[0.95rem] font-semibold text-brandDark shadow-sm transition hover:bg-brandSoft/80">
+                <Link to="/appointments" className="inline-flex min-h-[46px] items-center justify-center rounded-[1.2rem] bg-brandSoft px-4 py-3 text-[0.9rem] font-semibold text-brandDark shadow-sm transition hover:bg-brandSoft/80 sm:min-h-12 sm:rounded-2xl sm:text-[0.95rem]">
                   Prep notes
                 </Link>
               </div>

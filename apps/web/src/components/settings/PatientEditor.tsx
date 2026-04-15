@@ -126,10 +126,10 @@ export const PatientEditor = () => {
   if (!canEditPatient) {
     return (
       <Card>
-        <SectionHeader title="Patient profile access" description="Patient-level editing stays with the primary caregiver." />
-        <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5">
-          <p className="font-semibold text-amber-900">This account cannot edit patient details.</p>
-          <p className="mt-2 text-sm text-amber-900/80">
+        <SectionHeader title="Patient Access" description="Patient-level editing stays with the primary caregiver." />
+        <div className="rounded-[1.7rem] border border-amber-200 bg-amber-50 p-4 sm:rounded-[2rem] sm:p-5">
+          <p className="text-[0.95rem] font-semibold text-amber-900 sm:text-base">This account cannot edit patient details.</p>
+          <p className="mt-2 text-[0.85rem] text-amber-900/80 sm:text-sm">
             Demographics, insurance, and emergency profile changes are limited to the primary caregiver so the care record stays consistent.
           </p>
         </div>
@@ -139,30 +139,30 @@ export const PatientEditor = () => {
 
   return (
     <Card>
-      <SectionHeader title="Patient profile" description="Everything responders, doctors, and family members need in one place." />
-      <div className="grid gap-4">
+      <SectionHeader title="Patient Details" description="Everything responders, doctors, and family members need in one place." />
+      <div className="grid gap-3.5 sm:gap-4">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-          <label className="flex h-24 w-24 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-borderColor bg-brandSoft text-brandDark">
+          <label className="flex h-20 w-20 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-borderColor bg-brandSoft text-brandDark sm:h-24 sm:w-24">
             {patientProfile.photoUrl ? (
               <img src={patientProfile.photoUrl} alt="Patient profile" className="h-full w-full object-cover" />
             ) : (
-              <UploadCloud className="h-8 w-8" />
+              <UploadCloud className="h-7 w-7 sm:h-8 sm:w-8" />
             )}
             <input className="hidden" type="file" accept="image/*" onChange={(event) => event.target.files?.[0] && void uploadImage(event.target.files[0])} />
           </label>
           <div>
-            <p className="text-base font-semibold text-textPrimary">Patient photo</p>
-            <p className="text-sm text-textSecondary">Tap to upload or replace the current photo.</p>
+            <p className="text-[0.95rem] font-semibold text-textPrimary sm:text-base">Patient photo</p>
+            <p className="text-[0.85rem] text-textSecondary sm:text-sm">Tap to upload or replace the current photo.</p>
           </div>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Name">
             <Input value={patientProfile.name} onChange={(event) => setPatientProfile((current) => ({ ...current, name: event.target.value }))} className={patientErrors.name ? "border-danger" : ""} />
-            {patientErrors.name ? <p className="mt-2 text-sm text-danger">{patientErrors.name}</p> : null}
+            {patientErrors.name ? <p className="mt-2 text-[0.85rem] text-danger sm:text-sm">{patientErrors.name}</p> : null}
           </Field>
           <Field label="Date of birth">
             <Input type="date" value={patientProfile.dateOfBirth} onChange={(event) => setPatientProfile((current) => ({ ...current, dateOfBirth: event.target.value }))} className={patientErrors.dateOfBirth ? "border-danger" : ""} />
-            {patientErrors.dateOfBirth ? <p className="mt-2 text-sm text-danger">{patientErrors.dateOfBirth}</p> : null}
+            {patientErrors.dateOfBirth ? <p className="mt-2 text-[0.85rem] text-danger sm:text-sm">{patientErrors.dateOfBirth}</p> : null}
           </Field>
         </div>
         <Field label="Main condition">
@@ -172,12 +172,12 @@ export const PatientEditor = () => {
           </datalist>
         </Field>
         <Field label="Other conditions">
-          <div className="flex flex-wrap gap-2 rounded-3xl border border-borderColor p-3">
+          <div className="flex flex-wrap gap-2 rounded-[1.4rem] border border-borderColor p-3 sm:rounded-3xl">
             {patientProfile.secondaryConditions.map((condition) => (
               <button
                 key={condition}
                 type="button"
-                className="rounded-full bg-brandSoft px-3 py-2 text-sm font-semibold text-brandDark"
+                className="rounded-full bg-brandSoft px-3 py-2 text-[0.82rem] font-semibold text-brandDark sm:text-sm"
                 onClick={() => setPatientProfile((current) => ({ ...current, secondaryConditions: current.secondaryConditions.filter((item) => item !== condition) }))}
               >
                 {condition} x
@@ -185,7 +185,7 @@ export const PatientEditor = () => {
             ))}
             <input
               list="condition-options"
-              className="min-w-0 flex-1 border-0 p-2 text-base outline-none"
+              className="min-w-0 flex-1 border-0 p-2 text-[0.95rem] outline-none sm:text-base"
               placeholder="Add another condition"
               value={conditionDraft}
               onChange={(event) => setConditionDraft(event.target.value)}
@@ -208,7 +208,7 @@ export const PatientEditor = () => {
           </Field>
           <Field label="Doctor phone">
             <Input value={patientProfile.primaryDoctorPhone} placeholder="+1 555-123-4567" onChange={(event) => setPatientProfile((current) => ({ ...current, primaryDoctorPhone: formatPhoneInput(event.target.value) }))} className={patientErrors.primaryDoctorPhone ? "border-danger" : ""} />
-            {patientErrors.primaryDoctorPhone ? <p className="mt-2 text-sm text-danger">{patientErrors.primaryDoctorPhone}</p> : null}
+            {patientErrors.primaryDoctorPhone ? <p className="mt-2 text-[0.85rem] text-danger sm:text-sm">{patientErrors.primaryDoctorPhone}</p> : null}
           </Field>
           <Field label="Hospital preference">
             <Input value={patientProfile.hospitalPreference} onChange={(event) => setPatientProfile((current) => ({ ...current, hospitalPreference: event.target.value }))} />
@@ -232,19 +232,19 @@ export const PatientEditor = () => {
           </Field>
         </div>
         <Field label="Allergies">
-          <div className="flex flex-wrap gap-2 rounded-3xl border border-borderColor p-3">
+          <div className="flex flex-wrap gap-2 rounded-[1.4rem] border border-borderColor p-3 sm:rounded-3xl">
             {patientProfile.allergies.map((allergy) => (
               <button
                 key={allergy}
                 type="button"
-                className="rounded-full bg-red-50 px-3 py-2 text-sm font-semibold text-red-700"
+                className="rounded-full bg-red-50 px-3 py-2 text-[0.82rem] font-semibold text-red-700 sm:text-sm"
                 onClick={() => setPatientProfile((current) => ({ ...current, allergies: current.allergies.filter((item) => item !== allergy) }))}
               >
                 {allergy} x
               </button>
             ))}
             <input
-              className="min-w-0 flex-1 border-0 p-2 text-base outline-none"
+              className="min-w-0 flex-1 border-0 p-2 text-[0.95rem] outline-none sm:text-base"
               placeholder="Type an allergy and press Enter"
               value={allergyDraft}
               onChange={(event) => setAllergyDraft(event.target.value)}
@@ -261,8 +261,8 @@ export const PatientEditor = () => {
             />
           </div>
         </Field>
-        <div className="flex justify-end">
-          <Button disabled={!patientDirty || patientSaving} onClick={savePatient}>
+        <div className="flex justify-stretch sm:justify-end">
+          <Button className="w-full sm:w-auto" disabled={!patientDirty || patientSaving} onClick={savePatient}>
             {patientSaving ? "Saving patient..." : "Save Patient"}
           </Button>
         </div>

@@ -101,10 +101,15 @@ const MessageBubble = ({ role, content, createdAt, isTyping }: MessageBubbleProp
 };
 
 /* ─── AI Guardrail Disclaimer ─────────────────────────────── */
-const AIDisclaimer = () => (
-  <div className="mx-2 mb-3 flex items-center gap-2 rounded-2xl bg-amber-50 border border-amber-200/50 px-3 py-2">
+const AIDisclaimer = ({ compact = false }: { compact?: boolean }) => (
+  <div
+    className={cn(
+      "mx-2 mb-3 flex items-center gap-2 border border-amber-200/50 bg-amber-50",
+      compact ? "rounded-[1.15rem] px-3 py-2" : "rounded-2xl px-3 py-2",
+    )}
+  >
     <Sparkles className="h-3.5 w-3.5 shrink-0 text-amber-500" />
-    <p className="text-[0.72rem] font-medium text-amber-700 leading-tight">
+    <p className={cn("font-medium leading-tight text-amber-700", compact ? "text-[0.68rem]" : "text-[0.72rem]")}>
       AI-generated · Not a medical diagnosis · Always consult your doctor
     </p>
   </div>
@@ -117,6 +122,7 @@ export const CareChatAssistant = ({ compact = false }: { compact?: boolean }) =>
   const [message, setMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [emotionalCheckInOpen, setEmotionalCheckInOpen] = useState(false);
+  const [sessionPickerOpen, setSessionPickerOpen] = useState(false);
   const [checkInMood, setCheckInMood] = useState("Tired but trying");
   const [checkInReply, setCheckInReply] = useState("");
   const [checkInLoading, setCheckInLoading] = useState(false);
@@ -236,14 +242,28 @@ export const CareChatAssistant = ({ compact = false }: { compact?: boolean }) =>
   if (compact) {
     return (
       <div className="flex h-full flex-col">
-        {/* Header meta */}
-        <div className="flex items-center gap-3 px-1 pb-3">
+        <div className="flex items-center gap-2 px-1 pb-2 sm:hidden">
+          <div className="glass-chip min-w-0 flex-1 justify-start px-3 py-2 text-[0.68rem] font-semibold text-textPrimary">
+            <span className="truncate">
+              {patient.preferredName ?? patient.name} · {calcAge(patient.dateOfBirth)}y
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setEmotionalCheckInOpen(true)}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[1rem] bg-brandSoft text-brandDark transition hover:bg-brandSoft/80"
+            aria-label="Emotional check-in"
+          >
+            <HeartHandshake className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="hidden items-center gap-3 px-1 pb-3 sm:flex">
           <AIAvatar size="md" />
           <div className="min-w-0">
-            <p className="text-sm font-bold text-textPrimary leading-none">CareCircle AI</p>
-            <p className="mt-0.5 text-xs text-textSecondary truncate">
-              Supporting care for {patient.preferredName ?? patient.name},{" "}
-              {calcAge(patient.dateOfBirth)} yrs
+            <p className="text-sm font-bold leading-none text-textPrimary">CareCircle AI</p>
+            <p className="mt-0.5 truncate text-xs text-textSecondary">
+              Supporting care for {patient.preferredName ?? patient.name}, {calcAge(patient.dateOfBirth)} yrs
             </p>
           </div>
           <button
@@ -256,9 +276,31 @@ export const CareChatAssistant = ({ compact = false }: { compact?: boolean }) =>
           </button>
         </div>
 
-        {/* Session strip */}
+        <div className="mb-2 flex items-center gap-2 px-1 sm:hidden">
+          {sessions.length > 1 ? (
+            <button
+              type="button"
+              onClick={() => setSessionPickerOpen(true)}
+              className="shrink-0 rounded-full border border-borderColor bg-white px-3 py-1.5 text-[0.68rem] font-semibold text-textPrimary transition hover:bg-slate-50"
+            >
+              Chats
+            </button>
+          ) : null}
+          <div className="min-w-0 flex-1 rounded-full border border-borderColor bg-white px-3 py-1.5 text-[0.68rem] font-semibold text-textPrimary">
+            <span className="block truncate">{selectedSession?.title ?? "New chat"}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSelectedSessionId(null)}
+            className="flex shrink-0 items-center gap-1 rounded-full border border-brand/20 bg-brandSoft px-3 py-1.5 text-[0.68rem] font-semibold text-brandDark transition hover:bg-brandSoft/80"
+          >
+            <Plus className="h-3 w-3" />
+            New
+          </button>
+        </div>
+
         {sessions.length > 1 ? (
-          <div className="mb-3 flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+          <div className="mb-3 hidden gap-2 overflow-x-auto pb-1 scrollbar-hide sm:flex">
             <button
               type="button"
               onClick={() => setSelectedSessionId(null)}
@@ -290,14 +332,13 @@ export const CareChatAssistant = ({ compact = false }: { compact?: boolean }) =>
           </div>
         ) : null}
 
-        <AIDisclaimer />
+        <AIDisclaimer compact />
 
-        {/* Messages */}
-        <div className="flex-1 space-y-3 overflow-y-auto px-1 py-2">
+        <div className="flex-1 space-y-2.5 overflow-y-auto px-1 py-1.5 sm:space-y-3 sm:py-2">
           {messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-5 py-6 text-center">
-              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-brand to-brandDark shadow-calm">
-                <Heart className="h-7 w-7 text-white" fill="currentColor" />
+            <div className="flex flex-col items-center justify-center gap-4 py-5 text-center sm:gap-5 sm:py-6">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-brand to-brandDark shadow-calm sm:h-14 sm:w-14">
+                <Heart className="h-6 w-6 text-white sm:h-7 sm:w-7" fill="currentColor" />
               </div>
               <div>
                 <p className="text-sm font-bold text-textPrimary">How can I help?</p>
@@ -306,12 +347,12 @@ export const CareChatAssistant = ({ compact = false }: { compact?: boolean }) =>
                 </p>
               </div>
               <div className="flex flex-wrap justify-center gap-2">
-                {promptChips.map((chip) => (
+                {promptChips.slice(0, 3).map((chip) => (
                   <button
                     key={chip}
                     type="button"
                     disabled={isSending}
-                    className="max-w-[200px] truncate rounded-full border border-borderColor bg-white px-3 py-1.5 text-left text-xs font-semibold text-textPrimary transition hover:border-brand hover:bg-brandSoft/30 disabled:opacity-60"
+                    className="max-w-[180px] truncate rounded-full border border-borderColor bg-white px-3 py-1.5 text-left text-[0.72rem] font-semibold text-textPrimary transition hover:border-brand hover:bg-brandSoft/30 disabled:opacity-60 sm:max-w-[200px] sm:text-xs"
                     onClick={() => void sendMessage(chip)}
                     title={chip}
                   >
@@ -336,33 +377,68 @@ export const CareChatAssistant = ({ compact = false }: { compact?: boolean }) =>
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input */}
-        <div className="mt-3 flex items-end gap-2 border-t border-borderColor pt-3">
-          <textarea
-            ref={textareaRef}
-            className="flex-1 resize-none rounded-2xl border border-borderColor bg-white px-3 py-2.5 text-sm text-textPrimary outline-none transition placeholder:text-textSecondary focus:border-brand min-h-[42px] max-h-[120px]"
-            placeholder="Ask anything… (Enter to send)"
-            rows={1}
-            value={message}
-            onChange={handleTextareaChange}
-            onKeyDown={handleKeyDown}
-          />
-          <button
-            type="button"
-            disabled={!message.trim() || isSending}
-            onClick={() => void sendMessage()}
-            className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-xl bg-brand text-white shadow-calm transition hover:bg-brandDark disabled:cursor-not-allowed disabled:opacity-50"
-            aria-label="Send message"
-          >
-            {isSending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
-          </button>
+        <div className="mt-3 border-t border-borderColor pt-3">
+          <div className="flex items-end gap-2 rounded-[1.35rem] border border-borderColor bg-white/92 p-2 shadow-[0_16px_28px_-24px_rgba(15,23,42,0.28)]">
+            <textarea
+              ref={textareaRef}
+              className="min-h-[40px] max-h-[120px] flex-1 resize-none bg-transparent px-2 py-2 text-sm text-textPrimary outline-none transition placeholder:text-textSecondary"
+              placeholder="Ask CareCircle..."
+              rows={1}
+              value={message}
+              onChange={handleTextareaChange}
+              onKeyDown={handleKeyDown}
+            />
+            <button
+              type="button"
+              disabled={!message.trim() || isSending}
+              onClick={() => void sendMessage()}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[1rem] bg-brand text-white shadow-calm transition hover:bg-brandDark disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label="Send message"
+            >
+              {isSending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+            </button>
+          </div>
         </div>
 
-        {/* Emotional check-in modal */}
+        <Modal open={sessionPickerOpen} title="Conversations" onClose={() => setSessionPickerOpen(false)}>
+          <div className="grid gap-3">
+            <Button
+              variant="secondary"
+              className="w-full"
+              onClick={() => {
+                setSelectedSessionId(null);
+                setSessionPickerOpen(false);
+              }}
+            >
+              <Plus className="h-4 w-4" />
+              Start new chat
+            </Button>
+            <div className="grid gap-2">
+              {sessions.map((session) => (
+                <button
+                  key={session.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedSessionId(session.id);
+                    setSessionPickerOpen(false);
+                  }}
+                  className={cn(
+                    "os-shell-soft px-4 py-4 text-left",
+                    selectedSessionId === session.id ? "border-brand/20 bg-brandSoft/65" : "",
+                  )}
+                >
+                  <p className="truncate font-semibold text-textPrimary">{session.title}</p>
+                  <p className="mt-1 text-xs text-textSecondary">{relativeTime(session.updatedAt)}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        </Modal>
+
         <Modal
           open={emotionalCheckInOpen}
           title="How are you doing?"

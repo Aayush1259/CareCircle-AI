@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { AnimatePresence, motion } from "framer-motion";
 import { Download, ExternalLink, PlayCircle, Send, Trash2, ShieldAlert } from "lucide-react";
 import toast from "react-hot-toast";
 import type { DisplayPreferences, FeedbackSubject, NotificationPreferences } from "@carecircle/shared";
-import { Button, Card, Field, Input, Modal, SectionHeader, Select, Textarea, Toggle } from "@/components/ui";
+import { Button, Card, Field, Input, Modal, SectionHeader, Select, Textarea, Toggle, cn } from "@/components/ui";
 import { useAppData } from "@/context/AppDataContext";
 import { apiFileRequest } from "@/lib/api";
 import { formatDate } from "@/lib/format";
@@ -57,6 +58,14 @@ const defaultDisplayPreferences: DisplayPreferences = {
   colorTheme: "teal",
   dashboardLayout: "detailed",
   highContrast: false,
+};
+const mobileTabLabels: Record<string, string> = {
+  profile: "Profile",
+  patient: "Patient",
+  team: "Team",
+  notifications: "Alerts",
+  security: "Privacy",
+  support: "Help",
 };
 
 export const SettingsPage = () => {
@@ -249,12 +258,12 @@ export const SettingsPage = () => {
   };
 
   const tabs = [
-    { id: "profile", label: "My Profile" },
-    { id: "patient", label: "Patient Info", visible: canEditPatient },
-    { id: "team", label: "Team Access", visible: canManageFamily },
-    { id: "notifications", label: "Notifications" },
-    { id: "security", label: "Security & Data" },
-    { id: "support", label: "Help & Support" },
+    { id: "profile", label: "Profile" },
+    { id: "patient", label: "Patient" , visible: canEditPatient },
+    { id: "team", label: "Team", visible: canManageFamily },
+    { id: "notifications", label: "Alerts" },
+    { id: "security", label: "Privacy" },
+    { id: "support", label: "Help" },
   ].filter((t) => t.visible !== false);
 
   const handleTabChange = (tabId: string) => {
@@ -264,40 +273,70 @@ export const SettingsPage = () => {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Horizontal Tabs */}
+    <div className="space-y-5 sm:space-y-6 lg:space-y-8">
+      <Card className="hero-shell hero-card-pad border-none text-white shadow-premium">
+        <div className="absolute -right-16 top-0 h-44 w-44 rounded-full bg-white/10 blur-3xl" />
+        <div className="absolute -bottom-16 left-0 h-40 w-40 rounded-full bg-sky-400/10 blur-3xl" />
+        <div className="relative z-10 max-w-3xl">
+          <div className="glass-chip w-fit text-white/88">Settings</div>
+          <h1 className="hero-headline mt-4 text-balance">
+            Manage your CareCircle workspace.
+          </h1>
+          <p className="hero-body-copy mt-3 max-w-2xl text-white/80">
+            Profile, alerts, privacy, and support stay organized in one clean control center.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2 text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-white/70">
+            <span>Role-based access</span>
+            <span className="text-white/35">•</span>
+            <span>{canExport ? "Export tools available" : "Standard account tools"}</span>
+            <span className="text-white/35">•</span>
+            <span>{canViewAuditLog ? `${securityAuditLogs.length} recent audit items` : "Private audit controls"}</span>
+          </div>
+        </div>
+      </Card>
+
       <div className="-mx-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
-        <div className="inline-flex space-x-2 rounded-full border border-borderColor bg-white p-1 shadow-calm">
+        <div className="os-shell inline-flex min-w-full gap-1.5 p-1.5 sm:min-w-0 sm:gap-2 sm:p-2">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => handleTabChange(tab.id)}
-              className={`rounded-full px-5 py-2.5 text-sm font-semibold transition-all ${
+              className={cn(
+                "min-h-[42px] rounded-[1.1rem] px-3 py-2 text-[0.72rem] font-semibold uppercase tracking-[0.12em] transition-all sm:min-h-[46px] sm:rounded-[1.35rem] sm:px-5 sm:py-2.5 sm:text-sm sm:normal-case sm:tracking-normal",
                 activeTab === tab.id
-                  ? "bg-brand text-white shadow-md"
-                  : "text-textSecondary hover:bg-slate-50 hover:text-textPrimary"
-              }`}
+                  ? "bg-gradient-to-br from-brand to-brandDark text-white shadow-[0_18px_34px_-18px_rgba(79,70,229,0.72)]"
+                  : "text-textSecondary hover:bg-white/70 hover:text-textPrimary",
+              )}
             >
-              {tab.label}
+              <span className="sm:hidden">{mobileTabLabels[tab.id] ?? tab.label}</span>
+              <span className="hidden sm:inline">{tab.label}</span>
             </button>
           ))}
         </div>
       </div>
 
-      <div className="grid gap-6">
-        {activeTab === "profile" && <ProfileEditor />}
-        {activeTab === "patient" && <PatientEditor />}
-        {activeTab === "team" && <AccessManager />}
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={activeTab}
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -14 }}
+          transition={{ duration: 0.28, ease: "easeOut" }}
+          className="grid gap-5 sm:gap-6"
+        >
+          {activeTab === "profile" && <ProfileEditor />}
+          {activeTab === "patient" && <PatientEditor />}
+          {activeTab === "team" && <AccessManager />}
 
-        {activeTab === "notifications" && (
-          <div className="grid gap-6 lg:grid-cols-2">
-            <Card>
+          {activeTab === "notifications" && (
+            <div className="grid gap-5 sm:gap-6 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
+            <Card className="mesh-card">
               <SectionHeader
-                title="Notifications"
-                description="Turn on the nudges that actually help."
+                title="Alert Preferences"
+                description="Turn on the nudges that help without creating noise."
                 action={
-                  <div className="flex gap-2">
+                  <>
                     <Button
                       variant="ghost"
                       onClick={() => setNotificationDraft(bootstrap.viewer.notificationPreferences)}
@@ -308,7 +347,7 @@ export const SettingsPage = () => {
                     <Button onClick={() => void saveNotifications()} disabled={!notificationDirty || notificationSaving}>
                       {notificationSaving ? "Saving..." : "Save changes"}
                     </Button>
-                  </div>
+                  </>
                 }
               />
               <div className="space-y-4">
@@ -320,10 +359,10 @@ export const SettingsPage = () => {
                   ["AI insight alerts", "aiInsightAlerts"],
                   ["Family activity updates", "familyActivityUpdates"],
                 ].map(([label, key]) => (
-                  <div key={key} className="flex items-center justify-between gap-4 rounded-[28px] border border-borderColor/80 bg-white p-4 shadow-sm">
-                    <div>
-                      <p className="font-semibold text-textPrimary">{label}</p>
-                      <p className="text-sm text-textSecondary">
+                  <div key={key} className="os-shell-soft flex items-center justify-between gap-3 px-3.5 py-3.5 sm:gap-4 sm:px-4 sm:py-4">
+                    <div className="min-w-0">
+                      <p className="text-[0.92rem] font-semibold leading-6 text-textPrimary sm:text-base">{label}</p>
+                      <p className="mt-1 text-[0.82rem] text-textSecondary sm:text-sm">
                         {notificationDraft[key as keyof NotificationPreferences] ? "Enabled" : "Off"}
                       </p>
                     </div>
@@ -376,10 +415,10 @@ export const SettingsPage = () => {
 
             <Card>
               <SectionHeader
-                title="Display settings"
-                description="Make the whole app easier to read at a glance."
+                title="Display And Readability"
+                description="Preview typography and color choices before you save them."
                 action={
-                  <div className="flex gap-2">
+                  <>
                     <Button
                       variant="ghost"
                       onClick={() => setDisplayDraft(currentSettings.display)}
@@ -390,10 +429,16 @@ export const SettingsPage = () => {
                     <Button onClick={() => void saveDisplay()} disabled={!displayDirty || displaySaving}>
                       {displaySaving ? "Saving..." : "Apply changes"}
                     </Button>
-                  </div>
+                  </>
                 }
               />
               <div className="grid gap-5">
+                <div className="section-well bg-brandSoft/30 p-4 sm:p-5">
+                  <p className="text-[0.95rem] font-semibold text-textPrimary sm:text-base">Live preview</p>
+                  <p className="mt-2 text-[0.85rem] leading-6 text-textSecondary sm:text-sm">
+                    Adjust font size, theme, and contrast. The preview applies while this tab is open.
+                  </p>
+                </div>
                 <div>
                   <p className="field-label">Font size</p>
                   <div className="grid gap-3 sm:grid-cols-3">
@@ -405,9 +450,10 @@ export const SettingsPage = () => {
                       <button
                         key={value}
                         type="button"
-                        className={`rounded-[28px] border p-4 text-left transition ${
-                          displayDraft.fontSize === value ? "border-brand bg-brandSoft shadow-sm" : "border-borderColor bg-white hover:bg-slate-50"
-                        }`}
+                        className={cn(
+                          "os-shell-soft rounded-[1.5rem] p-3.5 text-left transition-transform hover:-translate-y-0.5 sm:rounded-[1.8rem] sm:p-4",
+                          displayDraft.fontSize === value ? "border-brand/20 bg-brandSoft/60" : "",
+                        )}
                         onClick={() =>
                           setDisplayDraft((current) => ({
                             ...current,
@@ -415,8 +461,8 @@ export const SettingsPage = () => {
                           }))
                         }
                       >
-                        <p className="font-semibold text-textPrimary">{label}</p>
-                        <p className="mt-1 text-sm text-textSecondary">
+                        <p className="text-[0.92rem] font-semibold text-textPrimary sm:text-base">{label}</p>
+                        <p className="mt-1 text-[0.82rem] text-textSecondary sm:text-sm">
                           {value === "normal" ? "Balanced" : value === "large" ? "More readable" : "Highest visibility"}
                         </p>
                       </button>
@@ -427,16 +473,17 @@ export const SettingsPage = () => {
                   <p className="field-label">Color theme</p>
                   <div className="grid gap-3 sm:grid-cols-3">
                     {[
-                      ["teal", "#0D9488"],
-                      ["blue", "#2563EB"],
-                      ["purple", "#7C3AED"],
-                    ].map(([value, color]) => (
+                      ["teal", "Indigo", "#6366F1"],
+                      ["blue", "Azure", "#2563EB"],
+                      ["purple", "Violet", "#7C3AED"],
+                    ].map(([value, label, color]) => (
                       <button
                         key={value}
                         type="button"
-                        className={`rounded-[28px] border p-4 text-left transition ${
-                          displayDraft.colorTheme === value ? "border-brand bg-brandSoft shadow-sm" : "border-borderColor bg-white hover:bg-slate-50"
-                        }`}
+                        className={cn(
+                          "os-shell-soft rounded-[1.5rem] p-3.5 text-left transition-transform hover:-translate-y-0.5 sm:rounded-[1.8rem] sm:p-4",
+                          displayDraft.colorTheme === value ? "border-brand/20 bg-brandSoft/60" : "",
+                        )}
                         onClick={() =>
                           setDisplayDraft((current) => ({
                             ...current,
@@ -444,16 +491,17 @@ export const SettingsPage = () => {
                           }))
                         }
                       >
-                        <span className="mb-3 block h-8 w-full rounded-full" style={{ backgroundColor: color }} />
-                        <p className="font-semibold capitalize text-textPrimary">{value}</p>
+                        <span className="mb-3 block h-7 w-full rounded-full sm:h-8" style={{ backgroundColor: color }} />
+                        <p className="text-[0.92rem] font-semibold text-textPrimary sm:text-base">{label}</p>
+                        <p className="mt-1 text-[0.82rem] text-textSecondary sm:text-sm">OS-inspired accent palette</p>
                       </button>
                     ))}
                   </div>
                 </div>
-                <div className="flex items-center justify-between gap-4 rounded-[28px] border border-borderColor/80 bg-white p-4 shadow-sm">
-                  <div>
-                    <p className="font-semibold text-textPrimary">High contrast mode</p>
-                    <p className="text-sm text-textSecondary">Boost visual clarity across the whole app.</p>
+                <div className="os-shell-soft flex items-center justify-between gap-3 px-3.5 py-3.5 sm:gap-4 sm:px-4 sm:py-4">
+                  <div className="min-w-0">
+                    <p className="text-[0.92rem] font-semibold text-textPrimary sm:text-base">High contrast mode</p>
+                    <p className="mt-1 text-[0.82rem] text-textSecondary sm:text-sm">Boost clarity across the workspace while keeping the same layout.</p>
                   </div>
                   <Toggle
                     checked={displayDraft.highContrast}
@@ -469,39 +517,37 @@ export const SettingsPage = () => {
                 </div>
               </div>
             </Card>
-          </div>
-        )}
+            </div>
+          )}
 
         {activeTab === "security" && (
-          <Card>
+          <Card className="mesh-card">
             <SectionHeader
-              title="Data and privacy"
+              title="Privacy And Account"
               description={
                 canExport || canViewAuditLog
-                  ? "Export what you need and keep control of your information."
-                  : "Personal account controls live here. Patient exports and security logs stay with the primary caregiver."
+                  ? "Export what you need, rotate credentials safely, and review recent workspace security activity."
+                  : "Personal account controls live here. Patient exports and audit logs stay with the primary caregiver."
               }
             />
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+            <div className="grid gap-5 sm:gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
               <div className="space-y-4">
-                <div className="rounded-[28px] border border-borderColor/80 bg-white p-5 shadow-sm">
-                  <p className="text-base font-semibold text-textPrimary">Account security</p>
-                  <p className="mt-1 text-sm text-textSecondary">
+                <div className="section-well p-4 sm:p-5">
+                  <p className="text-[0.95rem] font-semibold text-textPrimary sm:text-base">Account security</p>
+                  <p className="mt-2 text-[0.85rem] leading-6 text-textSecondary sm:text-sm">
                     Send a password reset link to {bootstrap.viewer.email} if you want to rotate your password safely.
                   </p>
-                  <div className="mt-4">
-                    <Button variant="secondary" onClick={() => void sendPasswordResetLink()} disabled={passwordResetSending}>
-                      <ShieldAlert className="h-4 w-4" />
-                      {passwordResetSending ? "Sending..." : "Email password reset link"}
-                    </Button>
-                  </div>
+                  <Button variant="secondary" className="mt-4 w-full sm:w-auto" onClick={() => void sendPasswordResetLink()} disabled={passwordResetSending}>
+                    <ShieldAlert className="h-4 w-4" />
+                    {passwordResetSending ? "Sending..." : "Email password reset link"}
+                  </Button>
                 </div>
 
                 {canExport ? (
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="rounded-[28px] border border-borderColor/80 bg-white p-5 shadow-sm">
-                      <p className="font-semibold text-textPrimary">Export workspace data</p>
-                      <p className="mt-1 text-sm text-textSecondary">
+                    <div className="os-shell-soft px-4 py-4 sm:px-5 sm:py-5">
+                      <p className="text-[0.95rem] font-semibold text-textPrimary sm:text-base">Export workspace data</p>
+                      <p className="mt-2 text-[0.85rem] leading-6 text-textSecondary sm:text-sm">
                         Download appointments, tasks, and journal entries as a CSV snapshot.
                       </p>
                       <Button
@@ -514,9 +560,9 @@ export const SettingsPage = () => {
                       </Button>
                     </div>
 
-                    <div className="rounded-[28px] border border-borderColor/80 bg-white p-5 shadow-sm">
-                      <p className="font-semibold text-textPrimary">Download uploaded files</p>
-                      <p className="mt-1 text-sm text-textSecondary">
+                    <div className="os-shell-soft px-4 py-4 sm:px-5 sm:py-5">
+                      <p className="text-[0.95rem] font-semibold text-textPrimary sm:text-base">Download uploaded files</p>
+                      <p className="mt-2 text-[0.85rem] leading-6 text-textSecondary sm:text-sm">
                         Save a ZIP archive of the documents currently attached to this patient workspace.
                       </p>
                       <Button
@@ -537,75 +583,81 @@ export const SettingsPage = () => {
                     </div>
                   </div>
                 ) : (
-                  <div className="rounded-[28px] border border-dashed border-borderColor p-5 text-sm text-textSecondary">
-                    This role can manage its own account settings, but patient export tools are only visible to the primary caregiver.
+                  <div className="section-well border-dashed">
+                    <p className="text-[0.95rem] font-semibold text-textPrimary sm:text-base">Export access is limited for this role</p>
+                    <p className="mt-2 text-[0.85rem] text-textSecondary sm:text-sm">
+                      Patient export tools are only visible to the primary caregiver, while this view keeps personal account controls available.
+                    </p>
                   </div>
                 )}
               </div>
 
-              <div className="rounded-[28px] border border-red-200 bg-red-50 p-5">
-                <p className="text-base font-semibold text-red-900">Danger zone</p>
-                <p className="mt-1 text-sm text-red-900/80">
-                  Remove this account from the current session and sign out of the patient workspace immediately.
-                </p>
-                <Button variant="danger" className="mt-4 w-full" onClick={() => setDeleteOpen(true)} disabled={deleteSaving}>
-                  <Trash2 className="h-4 w-4" />
-                  Delete account
-                </Button>
+              <div className="space-y-4">
+                <div className="rounded-[1.7rem] border border-red-200/80 bg-[linear-gradient(180deg,rgba(254,242,242,0.95),rgba(254,226,226,0.92))] p-4 shadow-[0_20px_40px_-28px_rgba(239,68,68,0.35)] sm:rounded-[2.5rem] sm:p-5">
+                  <p className="text-[0.95rem] font-semibold text-red-900 sm:text-base">Danger zone</p>
+                  <p className="mt-2 text-[0.85rem] leading-6 text-red-900/80 sm:text-sm">
+                    Remove this account from the current session and sign out of the patient workspace immediately.
+                  </p>
+                  <Button variant="danger" className="mt-4 w-full" onClick={() => setDeleteOpen(true)} disabled={deleteSaving}>
+                    <Trash2 className="h-4 w-4" />
+                    Delete account
+                  </Button>
+                </div>
+
+                {canViewAuditLog ? (
+                  <div className="section-well p-4 sm:p-5">
+                    <p className="text-[0.95rem] font-semibold text-textPrimary sm:text-base">Recent security activity</p>
+                    <div className="mt-4 space-y-3">
+                      {securityAuditLogs.length === 0 ? (
+                        <p className="text-[0.85rem] italic text-textSecondary sm:text-sm">No recent activity found.</p>
+                      ) : (
+                        securityAuditLogs.map((entry) => (
+                          <div key={entry.id} className="os-shell-soft flex items-start justify-between gap-3 px-3.5 py-3.5 sm:px-4 sm:py-4">
+                            <div className="min-w-0">
+                              <p className="text-[0.85rem] font-semibold text-textPrimary sm:text-sm">{entry.action.replaceAll("_", " ")}</p>
+                              <p className="mt-1 text-[0.82rem] text-textSecondary sm:text-sm">{entry.detail}</p>
+                            </div>
+                            <p className="shrink-0 text-xs font-semibold uppercase tracking-[0.18em] text-textSecondary/70">{formatDate(entry.createdAt)}</p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
-            {canViewAuditLog ? (
-              <div className="mt-6 rounded-3xl border border-borderColor bg-slate-50 p-4">
-                <p className="text-base font-semibold text-textPrimary">Recent security activity</p>
-                <div className="mt-3 space-y-3">
-                  {securityAuditLogs.length === 0 ? (
-                    <p className="text-sm text-textSecondary italic">No recent activity found.</p>
-                  ) : (
-                    securityAuditLogs.map((entry) => (
-                      <div key={entry.id} className="flex items-start justify-between gap-3 rounded-2xl bg-white p-3 shadow-sm">
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-textPrimary">{entry.action.replaceAll("_", " ")}</p>
-                          <p className="text-sm text-textSecondary">{entry.detail}</p>
-                        </div>
-                        <p className="shrink-0 text-xs text-textSecondary">{formatDate(entry.createdAt)}</p>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            ) : null}
           </Card>
         )}
 
         {activeTab === "support" && (
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div className="grid gap-5 sm:gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.95fr)]">
             <Card>
-              <SectionHeader title="Help and support" description="Answers and quick guides without the tech jargon." action={<Button variant="ghost" onClick={() => setFeedbackOpen(true)}>Send feedback</Button>} />
+              <SectionHeader title="Help Center" description="Answers and guidance without the tech jargon." action={<Button variant="ghost" onClick={() => setFeedbackOpen(true)}>Send feedback</Button>} />
               <div className="space-y-3">
                 {faqs.map(([question, answer]) => (
-                  <details key={question} className="rounded-3xl border border-borderColor p-4 bg-white/50 hover:bg-white transition-colors">
-                    <summary className="cursor-pointer text-base font-semibold text-textPrimary">{question}</summary>
-                    <p className="mt-3 text-base text-textSecondary leading-relaxed">{answer}</p>
+                  <details key={question} className="os-shell-soft px-3.5 py-3.5 transition-colors open:bg-white/85 sm:px-4 sm:py-4">
+                    <summary className="cursor-pointer text-[0.95rem] font-semibold text-textPrimary sm:text-base">{question}</summary>
+                    <p className="mt-3 text-[0.9rem] leading-6 text-textSecondary sm:text-base sm:leading-relaxed">{answer}</p>
                   </details>
                 ))}
               </div>
             </Card>
 
-            <Card>
-              <SectionHeader title="Guides and quick links" description="Short walkthroughs for the moments you need extra confidence." />
+            <Card className="mesh-card">
+              <SectionHeader title="Guides And Resources" description="Short walkthroughs for the moments you need extra confidence." />
               <div className="space-y-5">
                 <div className="grid gap-4 sm:grid-cols-2">
                   {videoGuides.map((guide) => (
-                    <div key={guide.title} className="rounded-3xl border border-borderColor p-4 bg-white/50">
+                    <div key={guide.title} className="os-shell-soft px-3.5 py-3.5 sm:px-4 sm:py-4">
                       <button
                         type="button"
-                        className="flex h-32 w-full items-center justify-center rounded-2xl bg-gradient-to-br from-brand to-brandDark text-white shadow-md transition hover:opacity-95"
+                        className="flex h-28 w-full items-center justify-center rounded-[1.35rem] bg-gradient-to-br from-brand to-brandDark text-white shadow-[0_22px_36px_-24px_rgba(79,70,229,0.72)] transition hover:opacity-95 sm:h-32 sm:rounded-[1.6rem]"
                         onClick={() => setVideoOpen(guide.url)}
                       >
                         <PlayCircle className="h-10 w-10 opacity-90 transition-opacity hover:opacity-100" />
                       </button>
-                      <p className="mt-4 text-base font-bold text-textPrimary line-clamp-1">{guide.title}</p>
-                      <p className="mt-1 text-sm text-textSecondary line-clamp-2">{guide.description}</p>
+                      <p className="mt-4 line-clamp-1 font-['Outfit'] text-base font-bold text-textPrimary sm:text-lg">{guide.title}</p>
+                      <p className="mt-1 line-clamp-2 text-[0.85rem] text-textSecondary sm:text-sm">{guide.description}</p>
                       <Button variant="secondary" className="mt-4 w-full" onClick={() => setVideoOpen(guide.url)}>
                         Watch guide
                       </Button>
@@ -613,8 +665,8 @@ export const SettingsPage = () => {
                   ))}
                 </div>
 
-                <div className="rounded-[28px] border border-borderColor/80 bg-slate-50/80 p-5">
-                  <p className="text-base font-semibold text-textPrimary">Quick help links</p>
+                <div className="section-well p-4 sm:p-5">
+                  <p className="text-[0.95rem] font-semibold text-textPrimary sm:text-base">Quick help links</p>
                   <div className="mt-4 grid gap-3">
                     {currentSettings.helpLinks.map((link) => (
                       <a
@@ -622,7 +674,7 @@ export const SettingsPage = () => {
                         href={link.url}
                         target="_blank"
                         rel="noreferrer"
-                        className="flex items-center justify-between rounded-2xl border border-borderColor bg-white px-4 py-3 text-sm font-semibold text-textPrimary transition hover:bg-slate-50"
+                        className="os-shell-soft flex items-center justify-between px-3.5 py-3.5 text-[0.85rem] font-semibold text-textPrimary transition-transform hover:-translate-y-0.5 sm:px-4 sm:py-4 sm:text-sm"
                       >
                         <span>{link.title}</span>
                         <ExternalLink className="h-4 w-4 text-textSecondary" />
@@ -634,15 +686,16 @@ export const SettingsPage = () => {
             </Card>
           </div>
         )}
-      </div>
 
       <Modal open={Boolean(videoOpen)} title="Guide preview" onClose={() => setVideoOpen(null)}>
         {videoOpen ? (
           <div className="space-y-4">
-            <div className="aspect-video overflow-hidden rounded-3xl border border-borderColor">
-              <iframe title="CareCircle guide placeholder" src={videoOpen} className="h-full w-full" allowFullScreen />
+            <div className="overflow-hidden rounded-[1.7rem] border border-white/70 bg-white/70 shadow-[0_20px_36px_-28px_rgba(15,23,42,0.24)]">
+              <div className="aspect-video">
+                <iframe title="CareCircle guide placeholder" src={videoOpen} className="h-full w-full" allowFullScreen />
+              </div>
             </div>
-            <a href={videoOpen} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-base font-semibold text-brandDark hover:underline">
+            <a href={videoOpen} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-[0.95rem] font-semibold text-brandDark hover:underline sm:text-base">
               Open in a new tab
               <ExternalLink className="h-4 w-4" />
             </a>
@@ -662,7 +715,7 @@ export const SettingsPage = () => {
           </Field>
           <Field label="Message">
             <Textarea value={feedbackForm.message} onChange={(event) => setFeedbackForm((current) => ({ ...current, message: event.target.value }))} placeholder="Please describe what happened..." />
-            <p className="mt-2 text-sm text-textSecondary">{feedbackForm.message.length} / {feedbackMinLength} characters minimum</p>
+            <p className="mt-2 text-[0.85rem] text-textSecondary sm:text-sm">{feedbackForm.message.length} / {feedbackMinLength} characters minimum</p>
           </Field>
           <Field label="Reply email (optional)">
             <Input type="email" value={feedbackForm.replyEmail} onChange={(event) => setFeedbackForm((current) => ({ ...current, replyEmail: event.target.value }))} placeholder="you@example.com" />
@@ -676,20 +729,20 @@ export const SettingsPage = () => {
 
       <Modal open={deleteOpen} title="Delete account" onClose={() => setDeleteOpen(false)}>
         <div className="grid gap-4">
-          <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
+          <div className="rounded-[1.45rem] border border-red-200 bg-red-50 p-4 sm:rounded-[1.6rem]">
             <div className="flex gap-3">
               <ShieldAlert className="h-5 w-5 shrink-0 text-red-600" />
               <div>
-                <p className="text-sm font-semibold text-red-900">This action cannot be undone</p>
-                <p className="mt-1 text-sm text-red-800">
+                <p className="text-[0.85rem] font-semibold text-red-900 sm:text-sm">This action cannot be undone</p>
+                <p className="mt-1 text-[0.85rem] text-red-800 sm:text-sm">
                   This signs you out and removes this session's account data. You will lose access to the patient record immediately.
                 </p>
               </div>
             </div>
           </div>
-          <p className="text-base font-semibold text-textPrimary">Type DELETE to confirm.</p>
+          <p className="text-[0.95rem] font-semibold text-textPrimary sm:text-base">Type DELETE to confirm.</p>
           <Input value={deleteText} onChange={(event) => setDeleteText(event.target.value)} placeholder="DELETE" />
-          <div className="flex justify-end gap-3 mt-2">
+          <div className="mt-2 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
             <Button variant="ghost" onClick={() => setDeleteOpen(false)} disabled={deleteSaving}>Cancel</Button>
             <Button variant="danger" disabled={deleteText !== "DELETE" || deleteSaving} onClick={deleteAccount}>
               {deleteSaving ? "Deleting..." : "Delete Account"}
@@ -697,6 +750,8 @@ export const SettingsPage = () => {
           </div>
         </div>
       </Modal>
+    </motion.div>
+  </AnimatePresence>
     </div>
   );
 };
